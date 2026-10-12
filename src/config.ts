@@ -14,7 +14,10 @@ export const config = {
   password: process.env.API_PASSWORD ?? '',
   dmsDealerId: Number(process.env.API_DMS_DEALER_ID ?? 0),
   staticToken: process.env.API_TOKEN ?? '',
-  methods: list(process.env.METHODS).map((m) => m.toUpperCase()),
+  // Safe by default: generic tests only run GET unless ALLOW_WRITES=true (or METHODS is set explicitly).
+  methods: list(process.env.METHODS).length
+    ? list(process.env.METHODS).map((m) => m.toUpperCase())
+    : process.env.ALLOW_WRITES === 'true' ? [] : ['GET'],
   exclude: list(process.env.EXCLUDE),
   timeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 30000),
   passStatuses: [200, 201, 204],
