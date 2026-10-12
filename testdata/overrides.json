@@ -1,0 +1,25 @@
+{
+  "POST /api/v1/Order/{dealerGuid}": {
+    "skip": true
+  },
+  "DELETE /api/v1/Order/{dealerGuid}": {
+    "skip": true
+  },
+  "POST /api/v1/Customer": {
+    "skip": true
+  },
+  "PUT /api/v1/Customer/{dealerGuid}": {
+    "skip": true
+  },
+  "POST /api/v1/Inspection/Session/{dealerGuid}": {
+    "skip": true
+  },
+  "DELETE /api/v1/Inspection/Session/{dealerGuid}": {
+    "skip": true
+  },
+  "GET /api/v1/Order/{dealerGuid}": {
+    "query": {
+      "InvoiceGuid": null
+    }
+  }
+}

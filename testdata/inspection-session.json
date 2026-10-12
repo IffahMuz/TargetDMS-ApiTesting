@@ -1,0 +1,27 @@
+{
+  "inspectionSessionId": null,
+  "inspectionTemplateId": "c02c1860-f52e-4df2-9398-f70ecd064fca",
+  "workOrderId": 1077537,
+  "customerId": "17395",
+  "unitId": "",
+  "status": "Completed",
+  "results": [
+    {
+      "inspectionResultId": null,
+      "templateModuleId": "8d771643-fde1-4e3c-a09a-4b294eee3beb",
+      "templateItemId": "02faf8b1-3f0a-4fa7-b46f-bc96f2bca15c",
+      "status": "marginal",
+      "notes": "",
+      "photos": [],
+      "jobId": 7839
+    },
+    {
+      "inspectionResultId": null,
+      "templateModuleId": "8d771643-fde1-4e3c-a09a-4b294eee3beb",
+      "templateItemId": "ffe78ade-28e4-44d2-8391-b3668af2508b",
+      "status": "poor",
+      "notes": "",
+      "photos": []
+    }
+  ]
+}
