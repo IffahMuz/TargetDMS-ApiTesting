@@ -34,6 +34,24 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(isClientError(res.status()), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(true);
   });
 
+  // Evidence on dealer 888166: condition "" -> 8972 items, "New" -> 7299, "Used" -> 0. The 1673 items that are not New
+  // are never returned by the "Used" filter. Wholegoods show the same gap (WG: "" -> 1950, "New" -> 301, "Used" -> 0).
+  // The backend only forwards `condition` to Everest unchanged, so the filter is applied upstream.
+  test('GetInventory condition "Used" should return the items that are not New [known defect]', async ({ request }) => {
+    const total = async (condition: string) => {
+      const res = await request.post('/api/v1/Inventory/GetInventory', {
+        headers,
+        data: { dealerId: String(IDS.dealerId), itemType: '', search: '', mfrCode: '', availability: '', categoryId: '', condition, modelCode: '', tag: '', pageNumber: 0, pageSize: 1 },
+        timeout: config.timeoutMs,
+      });
+      expect(config.passStatuses, `HTTP ${res.status()} for condition "${condition}"`).toContain(res.status());
+      return (await json(res)).data.totalCount as number;
+    };
+    const [all, fresh, used] = [await total(''), await total('New'), await total('Used')];
+    expect(used, `Used=${used}, New=${fresh}, all=${all}: Used should not be empty`).toBeGreaterThan(0);
+    expect(used + fresh, `Used (${used}) + New (${fresh}) should equal all (${all})`).toBe(all);
+  });
+
   test('GetInventory far past the last page should return an empty list, not time out [known defect]', async ({ request }) => {
     const res = await request.post('/api/v1/Inventory/GetInventory', {
       headers,
