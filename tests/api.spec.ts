@@ -3,10 +3,11 @@ import * as fs from 'fs';
 import { config, tokenPath } from '../src/config';
 import { loadOperations } from '../src/operations';
 import { explicitGetIds } from '../src/get-calls';
+import { explicitPostIds } from '../src/post-calls';
 
 const { token } = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
-// GETs with an explicit test (tests/get/*) are skipped here; everything else is still covered generically.
-const operations = loadOperations().filter((op) => !explicitGetIds.has(op.id));
+// GET/POST calls with an explicit test (tests/get, tests/post) are skipped here; everything else is still covered generically.
+const operations = loadOperations().filter((op) => !explicitGetIds.has(op.id) && !explicitPostIds.has(op.id));
 
 // One test per Swagger operation. Every test asserts the status is 200, 201 or 204.
 for (const op of operations) {
