@@ -4,6 +4,9 @@ import { config, tokenPath } from '../src/config';
 import { loadOperations } from '../src/operations';
 import { explicitGetIds } from '../src/get-calls';
 import { explicitPostIds } from '../src/post-calls';
+import { pace } from '../src/pace';
+
+test.beforeEach(pace);
 
 const { token } = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
 // GET/POST calls with an explicit test (tests/get, tests/post) are skipped here; everything else is still covered generically.

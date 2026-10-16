@@ -2,6 +2,9 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import { config, tokenPath } from '../../src/config';
 import { GetCall, IDS } from '../../src/get-calls/types';
+import { pace } from '../../src/pace';
+
+test.beforeEach(pace);
 
 const { token } = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
 

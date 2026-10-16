@@ -9,13 +9,36 @@ export const dealerCalls: GetCall[] = [
     check: (data) => expect(Array.isArray(data)).toBe(true),
   },
   {
-    name: 'Dealer tags have id and name',
-    path: '/api/v1/Dealer/GetTags',
-    query: { DealerId: IDS.dealerId, PageSize: 10 },
+    name: 'Dealer tags (paged) have id, name, color and category',
+    path: '/api/v1/Dealer/Tags/{dealerGuid}',
+    query: { PageNumber: 1, PageSize: 10 },
     check: (data) => {
-      expect(data.length).toBeGreaterThan(0);
-      expect(data[0]).toHaveProperty('tagId');
-      expect(data[0]).toHaveProperty('name');
+      expect(data.pageNumber).toBe(1);
+      expect(data.pageSize).toBe(10);
+      expect(data.totalCount).toBeGreaterThan(0);
+      expect(data.items.length).toBeGreaterThan(0);
+      expect(data.items.length).toBeLessThanOrEqual(10);
+      for (const key of ['tagId', 'name', 'color', 'category', 'isActive']) {
+        expect(data.items[0], `missing ${key}`).toHaveProperty(key);
+      }
+    },
+  },
+  {
+    name: 'Dealer tags category filter returns only that category',
+    path: '/api/v1/Dealer/Tags/{dealerGuid}',
+    query: { PageNumber: 1, PageSize: 10, Category: 'Public' },
+    check: (data) => {
+      expect(data.items.length).toBeGreaterThan(0);
+      for (const tag of data.items) expect(tag.category).toBe('Public');
+    },
+  },
+  {
+    name: 'Dealer tags search with no match returns an empty page',
+    path: '/api/v1/Dealer/Tags/{dealerGuid}',
+    query: { PageNumber: 1, PageSize: 10, Search: 'ZZZZ-NO-SUCH-TAG' },
+    check: (data) => {
+      expect(data.totalCount).toBe(0);
+      expect(data.items).toEqual([]);
     },
   },
   {

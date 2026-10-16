@@ -72,17 +72,27 @@ export const inventoryCalls: GetCall[] = [
     },
   },
   {
-    // Known server issue: returns HTTP 500. Kept as a real test so the report keeps flagging it.
-    name: 'Wholegoods list (paged) [known 500]',
+    // currentOwnerId must be a real owner (here the test customer); without it the API returns 500.
+    name: 'Wholegoods owned by the test customer (paged)',
     path: '/api/v1/Inventory/Wholegoods/{dealerGuid}',
-    query: { PageNumber: 1, PageSize: 10 },
-    check: (data) => expect(Array.isArray(data?.items ?? data)).toBe(true),
+    query: { pageNumber: 1, pageSize: 10, search: '', currentOwnerId: IDS.customerId },
+    check: (data) => {
+      expect(data.totalCount).toBeGreaterThan(0);
+      expect(data.units.length).toBeGreaterThan(0);
+      for (const unit of data.units) {
+        expect(unit).toHaveProperty('inventoryWGId');
+        expect(unit.currentOwnerId).toBe(IDS.customerId);
+      }
+    },
   },
   {
-    // Known server issue: returns HTTP 500. Needs a real wholegood id once the list endpoint works.
-    name: 'Wholegood detail [known 500]',
+    name: 'Wholegood detail for a known unit',
     path: '/api/v1/Inventory/Wholegood/Detail/{dealerGuid}',
-    query: { InventoryWgId: 'test-InventoryWgId' },
-    check: (data) => expect(data).toBeTruthy(),
+    query: { InventoryWgId: '34254', DealerId: IDS.dealerId },
+    check: (data) => {
+      expect(data.inventoryWGId).toBe('34254');
+      expect(data.dealerId).toBe(IDS.dealerId);
+      expect(data).toHaveProperty('serialNumber');
+    },
   },
 ];

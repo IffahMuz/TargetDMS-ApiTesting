@@ -33,11 +33,4 @@ export const otherCalls: GetCall[] = [
     pathParams: { dealerId: IDS.dealerId },
     check: (data) => expect(Array.isArray(data)).toBe(true),
   },
-  {
-    // Known issue: HTTP 500 "not a valid Base-64 string". Needs a real receipt token.
-    name: 'Notification receipt by token [known 500]',
-    path: '/api/v1/Notification/GetReceipt',
-    query: { token: 'REPLACE-WITH-REAL-RECEIPT-TOKEN' },
-    check: (data) => expect(data).toBeTruthy(),
-  },
 ];

@@ -6,7 +6,7 @@ export default defineConfig({
   globalSetup: './src/global-setup.ts',
   timeout: config.timeoutMs + 5000,
   retries: 0,
-  workers: 4,
+  workers: 1, // single worker + pacing keeps the run under the API rate limit (100 req / 3 min)
   reporter: [
     ['list'],
     ['html', { outputFolder: 'reports/playwright-html', open: 'never' }],

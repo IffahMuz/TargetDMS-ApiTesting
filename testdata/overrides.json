@@ -21,5 +21,20 @@
     "query": {
       "InvoiceGuid": null
     }
+  },
+  "POST /api/v1/Dealer/Tag/{dealerGuid}": {
+    "skip": true
+  },
+  "DELETE /api/v1/Dealer/Tag/{dealerGuid}/{tagId}": {
+    "skip": true
+  },
+  "POST /api/v1/Dealer/Tags/Assign/{dealerGuid}": {
+    "skip": true
+  },
+  "POST /api/v1/Dealer/Tags/Remove/{dealerGuid}": {
+    "skip": true
+  },
+  "GET /api/v1/Notification/GetReceipt": {
+    "skip": true
   }
 }

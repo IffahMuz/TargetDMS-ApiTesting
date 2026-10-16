@@ -2,6 +2,9 @@ import { test, expect, request as pwRequest, APIResponse } from '@playwright/tes
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';
+import { pace } from '../../src/pace';
+
+test.beforeEach(pace);
 
 const { token } = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
 const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };

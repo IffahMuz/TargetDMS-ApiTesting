@@ -3,6 +3,9 @@ import * as fs from 'fs';
 import { config, tokenPath } from '../../src/config';
 import { IDS } from '../../src/get-calls/types';
 import { PostCall } from '../../src/post-calls/types';
+import { pace } from '../../src/pace';
+
+test.beforeEach(pace);
 
 const { token } = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
 
