@@ -52,6 +52,51 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(used + fresh, `Used (${used}) + New (${fresh}) should equal all (${all})`).toBe(all);
   });
 
+  // Deleting a tag removes it from the tag list and from the part's tagDetails, but the assignment row stays behind:
+  // GetInventory with tag=<deleted id> still returns the item until Tags/Remove is called with the deleted id.
+  test('Deleting a tag should clear its inventory assignments [known defect]', async ({ request }) => {
+    const guid = IDS.dealerGuid;
+    const filter = (tag: string) => request.post('/api/v1/Inventory/GetInventory', {
+      headers,
+      data: { dealerId: String(IDS.dealerId), itemType: '', search: '', mfrCode: '', availability: '', categoryId: '', condition: 'New', modelCode: '', tag, pageNumber: 0, pageSize: 10 },
+      timeout: config.timeoutMs,
+    });
+    const created = await json(await request.post(`/api/v1/Dealer/Tag/${guid}`, {
+      headers, data: { tagId: 0, name: `AUTOMATION-stale-${Date.now()}`, color: '#111111', isActive: true, category: 'Inventory' }, timeout: config.timeoutMs,
+    }));
+    const tagId = created.data.tagId as number;
+    const part = { inventoryPartId: '****CARD FEE' };
+    try {
+      await request.post(`/api/v1/Dealer/Tags/Assign/${guid}`, { headers, data: { tagIds: [tagId], inventoryParts: [part] }, timeout: config.timeoutMs });
+      expect((await json(await filter(String(tagId)))).data.totalCount, 'assignment should be visible before delete').toBe(1);
+      const del = await request.delete(`/api/v1/Dealer/Tag/${guid}/${tagId}`, { headers, timeout: config.timeoutMs });
+      expect(config.passStatuses).toContain(del.status());
+      const after = (await json(await filter(String(tagId)))).data.totalCount;
+      expect(after, `deleted tag ${tagId} still matches ${after} inventory item(s)`).toBe(0);
+    } finally {
+      await request.post(`/api/v1/Dealer/Tags/Remove/${guid}`, { headers, data: { tagIds: [tagId], inventoryParts: [part] }, timeout: config.timeoutMs });
+      await request.delete(`/api/v1/Dealer/Tag/${guid}/${tagId}`, { headers, timeout: config.timeoutMs });
+    }
+  });
+
+  // Swagger/validator (SaveDealerTagRequestValidator): "IsActive cannot be set to false. Use the delete tag endpoint".
+  // The deployed API accepts isActive=false with 200 and stores it.
+  test('Saving a tag with isActive=false should be rejected with 400 [known defect]', async ({ request }) => {
+    const guid = IDS.dealerGuid;
+    const created = await json(await request.post(`/api/v1/Dealer/Tag/${guid}`, {
+      headers, data: { tagId: 0, name: `AUTOMATION-inactive-${Date.now()}`, color: '#222222', isActive: true, category: 'Public' }, timeout: config.timeoutMs,
+    }));
+    const tagId = created.data.tagId as number;
+    try {
+      const res = await request.post(`/api/v1/Dealer/Tag/${guid}`, {
+        headers, data: { tagId, name: `AUTOMATION-inactive-upd-${Date.now()}`, color: '#222222', isActive: false, category: 'Public' }, timeout: config.timeoutMs,
+      });
+      expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(400);
+    } finally {
+      await request.delete(`/api/v1/Dealer/Tag/${guid}/${tagId}`, { headers, timeout: config.timeoutMs });
+    }
+  });
+
   test('GetInventory far past the last page should return an empty list, not time out [known defect]', async ({ request }) => {
     const res = await request.post('/api/v1/Inventory/GetInventory', {
       headers,
