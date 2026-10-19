@@ -1,10 +1,14 @@
 import { customerPostCalls } from './customer';
+import { dealerPostCalls } from './dealer';
 import { inventoryPostCalls } from './inventory';
 import { PostCall } from './types';
+import { userPostCalls } from './user';
 
 export const postAreas: Record<string, PostCall[]> = {
   Customer: customerPostCalls,
+  Dealer: dealerPostCalls,
   Inventory: inventoryPostCalls,
+  User: userPostCalls,
 };
 
 /** "POST /api/v1/..." ids that have an explicit test, so the generic Swagger suite can skip them. */
