@@ -2,6 +2,7 @@ import { customerPostCalls } from './customer';
 import { dealerPostCalls } from './dealer';
 import { inventoryPostCalls } from './inventory';
 import { inventoryWritePostCalls } from './inventory-write';
+import { notificationPostCalls } from './notification';
 import { PostCall } from './types';
 import { userPostCalls } from './user';
 
@@ -10,6 +11,7 @@ export const postAreas: Record<string, PostCall[]> = {
   Dealer: dealerPostCalls,
   Inventory: inventoryPostCalls,
   InventoryWrite: inventoryWritePostCalls,
+  Notification: notificationPostCalls,
   User: userPostCalls,
 };
 

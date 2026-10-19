@@ -353,6 +353,28 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(config.passStatuses, `HTTP ${res.status()}: a purchase order that does not exist was accepted`).not.toContain(res.status());
   });
 
+  // Notification defects. Every request uses an order / customer that cannot exist, so nothing is ever sent.
+  // (SendPayByLinkEmail has the same loose domain check but a request for a missing order still SENDS the email, so it is not probed here.)
+  const notify = (request: any, path: string, data: unknown) =>
+    request.post(`/api/v1/Notification/${path}`, { headers, data, timeout: config.timeoutMs });
+
+  test('Sending a receipt email for an order that does not exist shows a JSON parser error (it should say "Details not found") [known defect]', async ({ request }) => {
+    const res = await notify(request, 'SendReceiptToEmail', { dmsDealerId: 199301001, dealerId: IDS.dealerId, orderId: 999999999, customerId: 999999999, invoiceId: 999999999 });
+    const text = JSON.stringify(await json(res));
+    expect(isClientError(res.status()), `HTTP ${res.status()}: ${text.slice(0, 200)}`).toBe(true);
+    expect(text).not.toMatch(/JSON token|LineNumber/i);
+  });
+
+  // The file link check is host.Contains("targetumh"), so a link on someone else's domain that merely contains the word passes validation.
+  // The request below is for a customer that does not exist (404 "Data not found"), which proves the link got past validation without sending anything.
+  test('A file link on https://targetumh.evil.com passes the trusted-domain check (it should be refused with 400) [known defect]', async ({ request }) => {
+    const res = await notify(request, 'SendFilesToEmail', {
+      dmsDealerId: 199301001, dealerId: IDS.dealerId, customerId: 999999999,
+      files: [{ fileName: 'a.png', fileUrl: 'https://targetumh.evil.com/a.png', fileType: 'image/png' }],
+    });
+    expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(400);
+  });
+
   test('GetInventory far past the last page should return an empty list, not time out [known defect]', async ({ request }) => {
     const res = await request.post('/api/v1/Inventory/GetInventory', {
       headers,
