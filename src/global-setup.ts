@@ -18,9 +18,16 @@ export default async function globalSetup() {
 
   let token = config.staticToken;
   if (config.username && config.password) {
-    const res = await ctx.post('/api/v1/Auth/Login', {
+    const doLogin = () => ctx.post('/api/v1/Auth/Login', {
       data: { dmsDealerId: config.dmsDealerId || undefined, userName: config.username, password: config.password },
     });
+    let res = await doLogin();
+    if (res.status() === 429) {
+      // Auth endpoints allow 5 calls per 3 minutes per IP; wait for the window to clear and retry once.
+      console.log('Login rate-limited (429); waiting 185s before retrying once...');
+      await new Promise((r) => setTimeout(r, 185000));
+      res = await doLogin();
+    }
     const json: any = await res.json().catch(() => ({}));
     token = json?.data?.accessToken ?? json?.Data?.AccessToken ?? token;
     if (!token) throw new Error(`Login failed: HTTP ${res.status()} ${json?.message ?? json?.Message ?? ''}`);
