@@ -1,4 +1,5 @@
-import { test, expect, APIResponse } from '@playwright/test';
+import { expect, APIResponse } from '@playwright/test';
+import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import { config, tokenPath } from '../../src/config';
 import { IDS } from '../../src/get-calls/types';
@@ -148,6 +149,148 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
       }
       await request.delete(`/api/v1/Order/${guid}?orderId=${orderId}`, { headers, timeout: config.timeoutMs });
     }
+  });
+
+  // Saving a warranty claim for work order 99999999 (which does not exist) returns 200 and stores an orphan claim,
+  // and GET claims for that work order then lists it. The test removes any claim it created.
+  test('A claim can be saved for a work order that does not exist (it should be refused) [known defect]', async ({ request }) => {
+    const claims = `/api/v1/Dealer/WarrantyClaims/${IDS.dealerGuid}`;
+    const missingWo = 99999999;
+    const body = {
+      warrantyClaimId: null, warrantorId: 'GRAVELY', claimType: 'W', claimNumber: 'AUTO-ORPHAN', subtotal: 0, tax: 0, total: 0,
+      failedDate: '2026-10-01T00:00:00', modelNumber: 'MODEL-X', mfrId: 'STI', serialNumber: 'SN-AUTO-1', failedPartName: 'Blade',
+    };
+    const res = await request.post(`${claims}?WorkOrderId=${missingWo}`, { headers, data: body, timeout: config.timeoutMs });
+    const status = res.status();
+    try {
+      expect(config.passStatuses, `HTTP ${status}: a claim was stored for a work order that does not exist`).not.toContain(status);
+    } finally {
+      const list = await json(await request.get(`${claims}?WorkOrderId=${missingWo}`, { headers, timeout: config.timeoutMs }));
+      for (const c of list.data ?? []) {
+        await request.delete(`${claims}?WorkOrderId=${missingWo}&WarrantyClaimId=${encodeURIComponent(c.warrantyClaimId)}`, { headers, timeout: config.timeoutMs });
+      }
+    }
+  });
+
+  // An empty claim body returns 502 whose message exposes a database column name ("WARRANTYCLAIM"."WARRANTORID").
+  test('Saving an empty claim shows a database error (it should say what is missing) [known defect]', async ({ request }) => {
+    const res = await request.post(`/api/v1/Dealer/WarrantyClaims/${IDS.dealerGuid}?WorkOrderId=${IDS.workOrderId}`, { headers, data: {}, timeout: config.timeoutMs });
+    const text = JSON.stringify(await json(res));
+    expect(res.status(), `HTTP ${res.status()}: ${text.slice(0, 200)}`).toBe(400);
+    expect(text).not.toMatch(/WARRANTYCLAIM|column/i);
+  });
+
+  // Deleting a warranty claim leaves the line item's moreInfo.WarrantyClaimId pointing at it. The item is still treated as covered
+  // (the customer's invoice amount stays 0 and the web app still shows Checkout), yet no claim exists to bill. Please confirm the intended behaviour.
+  test('Deleting a claim leaves parts pointing at it, so the customer pays nothing for them [known defect]', async ({ request }) => {
+    const { createWorkOrder, createClaim, addPart, getOrder, cleanUpOpenOrder, guid: dealerGuid } = await import('../../src/warranty-helpers');
+    const { claimIdOf } = await import('../../src/warranty-rules');
+    const wo = await createWorkOrder(request, `AUTOMATION-${Date.now()}`);
+    try {
+      const claimId = await createClaim(request, wo, 'DD');
+      await addPart(request, wo, claimId);
+      const del = await request.delete(`/api/v1/Dealer/WarrantyClaims/${dealerGuid}?WorkOrderId=${wo.orderId}&WarrantyClaimId=${claimId}`, { headers, timeout: config.timeoutMs });
+      expect(config.passStatuses).toContain(del.status());
+      const invoice = (await getOrder(request, wo.orderId)).invoices[0];
+      expect(claimIdOf(invoice.invoiceParts[0].moreInfo), `part still points at deleted claim ${claimId}; customer amount is ${invoice.invoiceAmount}`).toBeNull();
+    } finally {
+      await cleanUpOpenOrder(request, wo.orderId);
+    }
+  });
+
+  // A payment whose paymentInfo / everestPaymentInfo is not JSON makes checkout fail with a 502 that exposes a JSON parser message
+  // ("'p' is an invalid start of a value"). It should be a clean 400 telling the caller which field is wrong.
+  test('Unreadable payment details show a technical error (it should say which field is wrong) [known defect]', async ({ request }) => {
+    const { createWorkOrder, addPart, cashPayment, checkout, cleanUpOpenOrder, PART_PRICE } = await import('../../src/warranty-helpers');
+    const wo = await createWorkOrder(request, `AUTOMATION-${Date.now()}`);
+    try {
+      await addPart(request, wo);
+      const res = await checkout(request, wo.orderId, { payments: [cashPayment(wo, PART_PRICE, { paymentInfo: 'plain text' })] });
+      const text = JSON.stringify(await json(res));
+      expect(res.status(), `HTTP ${res.status()}: ${text.slice(0, 200)}`).toBe(400);
+      expect(text).not.toMatch(/invalid start of a value|\[SERVICE\]/);
+    } finally {
+      await cleanUpOpenOrder(request, wo.orderId);
+    }
+  });
+
+  // The three DELETE OrderLineItem endpoints answer 502 "The external service returned an error." whatever body is sent
+  // (full item, item returned by the add, ids only, with or without orderSource). The web app removes lines by saving the whole order again.
+  for (const kind of ['Parts', 'Labor', 'Miscellaneous'] as const) {
+    test(`Deleting a ${kind === 'Parts' ? 'part' : kind === 'Labor' ? 'labor' : 'miscellaneous'} line directly fails with a vague error (it should work) [known defect]`, async ({ request }) => {
+      const { createWorkOrder, guid: dealerGuid, getOrder } = await import('../../src/warranty-helpers');
+      const lh = await import('../../src/line-item-helpers');
+      const wo = await createWorkOrder(request, `AUTOMATION-${Date.now()}`);
+      try {
+        let added: any;
+        if (kind === 'Parts') added = (await lh.saveLine(request, 'Parts', lh.partBody(wo))).body.data.part;
+        if (kind === 'Labor') added = (await lh.saveLine(request, 'Labor', lh.laborBody(wo, await lh.firstJobCode(request)))).body.data.labor;
+        if (kind === 'Miscellaneous') added = (await lh.saveLine(request, 'Miscellaneous', lh.miscBody(wo, await lh.firstMiscItem(request)))).body.data.misc;
+        expect(added, 'the line was not added').toBeTruthy();
+        const res = await lh.deleteLine(request, kind, added);
+        expect(config.passStatuses, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`).toContain(res.status);
+        const inv = (await getOrder(request, wo.orderId)).invoices[0];
+        const left = kind === 'Parts' ? inv.invoiceParts : kind === 'Labor' ? inv.invoiceLabors : inv.invoiceMiscs;
+        expect(left).toHaveLength(0);
+      } finally {
+        await request.delete(`/api/v1/Order/${dealerGuid}?orderId=${wo.orderId}`, { headers, timeout: config.timeoutMs });
+      }
+    });
+  }
+
+  // Clock-in accepts a work order that does not exist and stores an entry for it. The test closes the entry again.
+  test('A technician can be clocked in to a work order that does not exist (it should be refused) [known defect]', async ({ request }) => {
+    const base = `/api/v1/Order/TimeClock`;
+    const { guid: dealerGuid } = await import('../../src/warranty-helpers');
+    const employees = (await json(await request.get(`${base}/Employees/${dealerGuid}`, { headers, timeout: config.timeoutMs }))).data;
+    const idle = employees.find((e: any) => !e.isClockedIn);
+    test.skip(!idle, 'no idle technician to test with');
+    const res = await request.post(`${base}/ClockIn/${dealerGuid}`, { headers, data: { employeeId: idle.salesRep, workOrderId: 99999999, workOrderJobId: 1, originComputerName: 'AUTOMATION' }, timeout: config.timeoutMs });
+    const status = res.status();
+    try {
+      expect(config.passStatuses, `HTTP ${status}: an entry was stored for a work order that does not exist`).not.toContain(status);
+    } finally {
+      if (config.passStatuses.includes(status)) {
+        await request.post(`${base}/ClockOut/${dealerGuid}`, { headers, data: { employeeId: idle.salesRep, comment: 'AUTOMATION cleanup', notes: 'closing a test entry', originComputerName: 'AUTOMATION' }, timeout: config.timeoutMs });
+      }
+    }
+  });
+
+  // An unknown technician id returns a raw database error ("string right truncation") instead of a clear message.
+  test('An unknown technician shows a database error (it should say the technician was not found) [known defect]', async ({ request }) => {
+    const { guid: dealerGuid } = await import('../../src/warranty-helpers');
+    const res = await request.post(`/api/v1/Order/TimeClock/ClockIn/${dealerGuid}`, { headers, data: { employeeId: 'NO-SUCH-EMP', workOrderId: 1, workOrderJobId: 1, originComputerName: 'AUTOMATION' }, timeout: config.timeoutMs });
+    const text = JSON.stringify(await json(res));
+    expect(res.status(), `HTTP ${res.status()}: ${text.slice(0, 200)}`).toBeLessThan(500);
+    expect(text).not.toMatch(/truncation|arithmetic exception|numeric overflow/i);
+  });
+
+  // Inventory count update: UpdateInventoryCountItemValidator says itemId > 0, quantity >= 0, binLocation <= 40 chars and safe input,
+  // but the body is an array, so those rules are never applied. Bad values reach the upstream system instead: some come back as a vague 502,
+  // a long bin location leaks a database error, and an unsafe bin location is accepted. These use an item and count that cannot exist.
+  const countUrl = (id: number) => `/api/v1/Inventory/Count/${'c4cf2b83-1e4a-4f89-b3da-82df1ad411cd'}/${id}`;
+  const badUpdates: [string, unknown][] = [
+    ['an item number of 0', [{ itemId: 0, quantity: 1, binLocation: 'A' }]],
+    ['a negative quantity', [{ itemId: 999999999, quantity: -1, binLocation: 'A' }]],
+    ['an empty list', []],
+  ];
+  for (const [what, items] of badUpdates) {
+    test(`Updating a count with ${what} should be a clean 400, not a vague 502 [known defect]`, async ({ request }) => {
+      const res = await request.put(countUrl(99999999), { headers, data: items, timeout: config.timeoutMs });
+      expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 160)}`).toBe(400);
+    });
+  }
+
+  test('A bin location longer than 40 characters shows a database error (it should be a clean 400) [known defect]', async ({ request }) => {
+    const res = await request.put(countUrl(99999999), { headers, data: [{ itemId: 999999999, quantity: 1, binLocation: 'x'.repeat(41) }], timeout: config.timeoutMs });
+    const text = JSON.stringify(await json(res));
+    expect(res.status(), `HTTP ${res.status()}: ${text.slice(0, 160)}`).toBe(400);
+    expect(text).not.toMatch(/FIREBIRD|truncation|arithmetic exception/i);
+  });
+
+  test('A bin location containing script tags is accepted (it should be refused) [known defect]', async ({ request }) => {
+    const res = await request.put(countUrl(99999999), { headers, data: [{ itemId: 999999999, quantity: 1, binLocation: '<script>alert(1)</script>' }], timeout: config.timeoutMs });
+    expect(res.status(), 'unsafe input should be refused with a 400').toBe(400);
   });
 
   test('GetInventory far past the last page should return an empty list, not time out [known defect]', async ({ request }) => {

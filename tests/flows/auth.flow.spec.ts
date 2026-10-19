@@ -1,4 +1,5 @@
-import { test, expect, APIResponse } from '@playwright/test';
+import { expect, APIResponse } from '@playwright/test';
+import { test } from '../../src/fixtures';
 import { config } from '../../src/config';
 import { pace } from '../../src/pace';
 

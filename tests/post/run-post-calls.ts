@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import { config, tokenPath } from '../../src/config';
 import { IDS } from '../../src/get-calls/types';

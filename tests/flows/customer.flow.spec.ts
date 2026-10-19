@@ -1,4 +1,5 @@
-import { test, expect, request as pwRequest, APIResponse } from '@playwright/test';
+import { expect, request as pwRequest, APIResponse } from '@playwright/test';
+import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';

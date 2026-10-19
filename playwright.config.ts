@@ -4,7 +4,8 @@ import { config } from './src/config';
 export default defineConfig({
   testDir: './tests',
   globalSetup: './src/global-setup.ts',
-  timeout: config.timeoutMs + 5000,
+  // Generous on purpose: src/fixtures.ts may wait for the API rate-limit window. Each request still has its own timeout (REQUEST_TIMEOUT_MS).
+  timeout: 330_000,
   retries: 0,
   workers: 1, // single worker + pacing keeps the run under the API rate limit (100 req / 3 min)
   reporter: [
