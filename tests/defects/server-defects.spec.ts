@@ -214,8 +214,9 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     }
   });
 
-  // The three DELETE OrderLineItem endpoints answer 502 "The external service returned an error." whatever body is sent
+  // The DELETE OrderLineItem endpoints answer 502 "The external service returned an error." whatever body is sent
   // (full item, item returned by the add, ids only, with or without orderSource). The web app removes lines by saving the whole order again.
+  // (The wholegood DELETE cannot be tested yet: no unit can be added, see the wholegood tests below.)
   for (const kind of ['Parts', 'Labor', 'Miscellaneous'] as const) {
     test(`Deleting a ${kind === 'Parts' ? 'part' : kind === 'Labor' ? 'labor' : 'miscellaneous'} line directly fails with a vague error (it should work) [known defect]`, async ({ request }) => {
       const { createWorkOrder, guid: dealerGuid, getOrder } = await import('../../src/warranty-helpers');
@@ -237,6 +238,35 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
       }
     });
   }
+
+  // No wholegood unit can be added to an order: every unit tried (34254 On Order, 33792 and 33686 Sold) answers 502
+  // "UpsertInvoiceWG failed ... RECEIPT_NOT_FOUND Inventory Receipt is not found At procedure 'ALLOCATE_SALES_SERIAL'".
+  // This also blocks the wholegood update, remove and DELETE tests, which are not written until a unit can be added.
+  test('A wholegood unit cannot be added to an order (502 RECEIPT_NOT_FOUND, it should be added) [known defect]', async ({ request }) => {
+    const { createWorkOrder, guid: dealerGuid } = await import('../../src/warranty-helpers');
+    const lh = await import('../../src/line-item-helpers');
+    const wo = await createWorkOrder(request, `AUTOMATION-${Date.now()}`);
+    try {
+      const res = await lh.saveLine(request, 'Wholegoods', lh.wgBody(wo));
+      expect(config.passStatuses, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 250)}`).toContain(res.status);
+    } finally {
+      await request.delete(`/api/v1/Order/${dealerGuid}?orderId=${wo.orderId}`, { headers, timeout: config.timeoutMs });
+    }
+  });
+
+  // PartNumber is required by the upstream system but not by the validator, so leaving it out reaches upstream and comes back as a 502.
+  // It should be a clean 400 ("PartNumber is required") from the validator.
+  test('A wholegood line without a part number is a vague 502 (it should be a 400) [known defect]', async ({ request }) => {
+    const { createWorkOrder, guid: dealerGuid } = await import('../../src/warranty-helpers');
+    const lh = await import('../../src/line-item-helpers');
+    const wo = await createWorkOrder(request, `AUTOMATION-${Date.now()}`);
+    try {
+      const res = await lh.saveLine(request, 'Wholegoods', lh.wgBody(wo, { partNumber: undefined }));
+      expect(res.status, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 250)}`).toBe(400);
+    } finally {
+      await request.delete(`/api/v1/Order/${dealerGuid}?orderId=${wo.orderId}`, { headers, timeout: config.timeoutMs });
+    }
+  });
 
   // Clock-in accepts a work order that does not exist and stores an entry for it. The test closes the entry again.
   test('A technician can be clocked in to a work order that does not exist (it should be refused) [known defect]', async ({ request }) => {

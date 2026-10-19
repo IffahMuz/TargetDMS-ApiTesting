@@ -29,7 +29,17 @@ export const miscBody = (wo: WorkOrder, item: { description: string; moreInfo: s
   invoiceGuid: wo.invoiceGuid, jobId: wo.jobId, quantitySold: 1, price: 5, retailPrice: 5, description: item.description, moreInfo: item.moreInfo, ...over,
 });
 
-type Kind = 'Parts' | 'Labor' | 'Miscellaneous';
+/** The test customer's unit (Wholegood API id 34254, serial Y576576, status On Order). A wholegood line only references it; nothing is checked out. */
+export const WG_UNIT = { inventoryWGId: '34254', manufacturerId: 'AHI', make: 'Animal Health International', model: 'hi', serialNumber: 'Y576576' };
+export const WG_PRICE = 100;
+
+export const wgBody = (wo: WorkOrder, over: Record<string, unknown> = {}) => ({
+  dealerId: 888166, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceWGId: 0, invoiceWGGuid: ZERO_GUID,
+  invoiceGuid: wo.invoiceGuid, jobId: wo.jobId, dealNumber: 0, ...WG_UNIT, partNumber: WG_UNIT.model, stockNumber: 'AUTO-WG', description: 'AUTOMATION wholegood',
+  cost: 50, price: WG_PRICE, suggestedRetailPrice: WG_PRICE, used: false, ...over,
+});
+
+type Kind = 'Parts' | 'Labor' | 'Miscellaneous' | 'Wholegoods';
 export async function saveLine(request: APIRequestContext, kind: Kind, body: object): Promise<{ status: number; body: any }> {
   const res = await request.post(`${LI}/${kind}/${guid}${q}`, { headers, data: body, timeout: config.timeoutMs });
   return { status: res.status(), body: await json(res) };
