@@ -323,6 +323,36 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(res.status(), 'unsafe input should be refused with a 400').toBe(400);
   });
 
+  // Purchase order receive: PurchaseOrderDetailDtoValidator (itemId > 0, quantities >= 0, productType <= 50, serial <= 50, prices >= 0, safe input)
+  // is never applied because the body is an array. Bad input either reaches the upstream system and comes back as a vague 502
+  // ("ProductType field is required", "itemId must be greater than 0"...) or is accepted silently. Every request uses an item that cannot exist,
+  // so nothing is ever received. A purchase order that does not exist is also answered with 200.
+  const poReceive = (request: any, id: number, items: unknown) =>
+    request.put(`/api/v1/PurchaseOrder/Receive/${IDS.dealerGuid}/${id}`, { headers, data: items, timeout: config.timeoutMs });
+  const noItem = { itemId: 999999999, receivedQty: 0, backOrderQty: 0, productType: 'P' };
+  const badReceives: [string, unknown][] = [
+    ['an empty list', []],
+    ['an item number of 0', [{ ...noItem, itemId: 0 }]],
+    ['a negative received quantity', [{ ...noItem, receivedQty: -1 }]],
+    ['a negative back-order quantity', [{ ...noItem, backOrderQty: -1 }]],
+    ['no product type', [{ itemId: 999999999, receivedQty: 0, backOrderQty: 0 }]],
+    ['a product type over 50 characters', [{ ...noItem, productType: 'P'.repeat(51) }]],
+    ['a serial number over 50 characters', [{ ...noItem, serialNumbers: [{ serialNumber: 'S'.repeat(51), price: 0, listPrice: 0 }] }]],
+    ['a negative serial price', [{ ...noItem, serialNumbers: [{ serialNumber: 'X', price: -1, listPrice: 0 }] }]],
+    ['script tags in the bin location', [{ ...noItem, binLocation: '<script>alert(1)</script>' }]],
+  ];
+  for (const [what, items] of badReceives) {
+    test(`Receiving a purchase order with ${what} should be a clean 400 [known defect]`, async ({ request }) => {
+      const res = await poReceive(request, 6240, items);
+      expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 160)}`).toBe(400);
+    });
+  }
+
+  test('Receiving a purchase order that does not exist is answered with success (it should be a 404) [known defect]', async ({ request }) => {
+    const res = await poReceive(request, 99999999, [noItem]);
+    expect(config.passStatuses, `HTTP ${res.status()}: a purchase order that does not exist was accepted`).not.toContain(res.status());
+  });
+
   test('GetInventory far past the last page should return an empty list, not time out [known defect]', async ({ request }) => {
     const res = await request.post('/api/v1/Inventory/GetInventory', {
       headers,
