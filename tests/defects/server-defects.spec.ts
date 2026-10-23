@@ -353,6 +353,27 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(config.passStatuses, `HTTP ${res.status()}: a purchase order that does not exist was accepted`).not.toContain(res.status());
   });
 
+  // Work order creation: the validator allows a job status of up to 20 characters, but the upstream system needs exactly one character
+  // ("JobStatusId must be a single alphanumeric character"), and an unknown technician is only noticed upstream ("SalesRep (...) not found").
+  // Both come back as a vague 502; they should be a clean 400 from the validator. If an order is ever created, the test closes it.
+  const woDefect = async (request: any, over: (job: any) => void) => {
+    const wh = await import('../../src/work-order-helpers');
+    const body = wh.workOrderBody(`AUTOMATION-WODEF-${Date.now()}`);
+    over(body.invoices[0].workOrderJobs[0]);
+    const res = await wh.saveOrder(request, body);
+    if (res.orderId) await wh.closeOrder(request, res.orderId);
+    return res;
+  };
+  test('A work order job status of more than one character is a vague 502 (it should be a clean 400) [known defect]', async ({ request }) => {
+    const res = await woDefect(request, (job) => { job.jobStatusId = 'ZZZ'; });
+    expect(res.status, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`).toBe(400);
+  });
+
+  test('A work order job for a technician that does not exist is a 502 (it should be a 400 or 404) [known defect]', async ({ request }) => {
+    const res = await woDefect(request, (job) => { job.technicianId = 'NO-SUCH-TECH'; });
+    expect(isClientError(res.status), `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`).toBe(true);
+  });
+
   // Notification defects. Every request uses an order / customer that cannot exist, so nothing is ever sent.
   // (SendPayByLinkEmail has the same loose domain check but a request for a missing order still SENDS the email, so it is not probed here.)
   const notify = (request: any, path: string, data: unknown) =>
