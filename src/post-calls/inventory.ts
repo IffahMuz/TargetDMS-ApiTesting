@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { DATA } from '../testdata';
 import { IDS, PostCall } from './types';
 
 // POST /Inventory/GetInventory is a read-only search (POST only carries the filter body).
@@ -48,10 +49,10 @@ export const inventoryPostCalls: PostCall[] = [
   {
     name: 'Search by part number finds it (case-insensitive)',
     path,
-    body: { ...filters, search: 'card fee' },
+    body: { ...filters, search: DATA.searchPart.search },
     check: (data) => {
       expect(data.totalCount).toBe(1);
-      expect(data.inventory[0].partNumber).toBe('CARD FEE');
+      expect(data.inventory[0].partNumber).toBe(DATA.searchPart.partNumber);
     },
   },
   {
@@ -105,29 +106,29 @@ export const inventoryPostCalls: PostCall[] = [
   {
     name: 'categoryId filter narrows the results',
     path,
-    body: { ...filters, categoryId: 'Accy', pageSize: 10 },
+    body: { ...filters, categoryId: DATA.categories.first.id, pageSize: 10 },
     check: (data) => {
       expect(data.totalCount).toBeGreaterThan(0);
-      expect(data.totalCount).toBeLessThan(7299);
-      for (const item of data.inventory) expect(item.category).toBe('Accessories');
+      expect(data.totalCount).toBeLessThan(DATA.categories.newTotal);
+      for (const item of data.inventory) expect(item.category).toBe(DATA.categories.first.description);
     },
   },
   {
     // The front end joins multi-select values with commas.
     name: 'Comma-joined categoryId returns the union of both categories',
     path,
-    body: { ...filters, categoryId: 'Accy,ATV', pageSize: 10 },
+    body: { ...filters, categoryId: `${DATA.categories.first.id},${DATA.categories.secondId}`, pageSize: 10 },
     check: (data) => expect(data.totalCount).toBeGreaterThan(0),
   },
   {
     // The front end sends the tag id as a string.
     name: 'tag filter returns only items carrying that tag',
     path,
-    body: { ...filters, tag: '1', pageSize: 10 },
+    body: { ...filters, tag: String(DATA.tags.inventoryTagId), pageSize: 10 },
     check: (data) => {
       expect(data.totalCount).toBeGreaterThan(0);
       for (const item of data.inventory) {
-        expect(item.tagDetails.map((t: any) => t.tagId)).toContain(1);
+        expect(item.tagDetails.map((t: any) => t.tagId)).toContain(DATA.tags.inventoryTagId);
       }
     },
   },

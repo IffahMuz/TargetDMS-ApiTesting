@@ -77,6 +77,7 @@ test.describe.serial('Flow: login -> use token -> validate -> refresh -> revoke'
 
   test('7. Revoke the refreshed token returns success', async ({ request }) => {
     test.skip(!refreshedToken, 'no refreshed token');
+    test.skip(config.skipRevoke, 'SKIP_TOKEN_REVOKE=true');
     const res = await request.post(`${api}/User/RevokeToken`, { headers: bearer(refreshedToken), timeout: config.timeoutMs });
     const body = await json(res);
     expect(config.passStatuses, `HTTP ${res.status()}`).toContain(res.status());

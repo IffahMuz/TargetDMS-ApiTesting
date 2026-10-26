@@ -67,7 +67,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
       headers, data: { tagId: 0, name: `AUTOMATION-stale-${Date.now()}`, color: '#111111', isActive: true, category: 'Inventory' }, timeout: config.timeoutMs,
     }));
     const tagId = created.data.tagId as number;
-    const part = { inventoryPartId: '****CARD FEE' };
+    const part = { inventoryPartId: DATA.searchPart.inventoryPartId };
     try {
       await request.post(`/api/v1/Dealer/Tags/Assign/${guid}`, { headers, data: { tagIds: [tagId], inventoryParts: [part] }, timeout: config.timeoutMs });
       expect((await json(await filter(String(tagId)))).data.totalCount, 'assignment should be visible before delete').toBe(1);
@@ -104,6 +104,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
   // `IsSuccessStatusCode` from the identity server and revokes with an access-token hint only.
   test('A revoked access token should stop working [known defect]', async ({ request }) => {
     test.skip(!config.username || !config.password, 'API_USERNAME / API_PASSWORD are not set');
+    test.skip(config.skipRevoke, 'SKIP_TOKEN_REVOKE=true');
     const login = await json(await request.post('/api/v1/Auth/Login', {
       data: { dmsDealerId: config.dmsDealerId || undefined, userName: config.username, password: config.password }, timeout: config.timeoutMs,
     }));
@@ -232,7 +233,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
         const res = await lh.deleteLine(request, kind, added);
         expect(config.passStatuses, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`).toContain(res.status);
         const inv = (await getOrder(request, wo.orderId)).invoices[0];
-        const left = kind === 'Parts' ? inv.invoiceParts : kind === 'Labor' ? inv.invoiceLabors : inv.invoiceMiscs;
+        const left = kind === 'Parts' ? inv.invoiceParts : kind === 'Labor' ? inv.invoiceLabors.filter((l: any) => l.description !== 'SHOP SUPPLIES') : inv.invoiceMiscs;
         expect(left).toHaveLength(0);
       } finally {
         await request.delete(`/api/v1/Order/${dealerGuid}?orderId=${wo.orderId}`, { headers, timeout: config.timeoutMs });

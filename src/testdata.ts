@@ -11,6 +11,10 @@ export const DATA: {
   warrantor: { id: string; name: string };
   unit: { inventoryWGId: string; manufacturerId: string; make: string; model: string; serialNumber: string };
   purchaseOrderId: number;
+  searchPart: { search: string; partNumber: string; inventoryPartId: string };
+  categories: { first: { id: string; description: string }; secondId: string; newTotal: number };
+  customerCategoryId: string;
+  tags: { inventoryTagId: number };
   inspection: { templateId: string; moduleId: string; item1: string; item2: string; workOrderId: number; jobId: number };
 } = fs.existsSync(dataFile) ? JSON.parse(fs.readFileSync(dataFile, 'utf8')) : (() => { throw new Error(`No test data for dealer ${config.dealerId}: create ${dataFile}`); })();
 

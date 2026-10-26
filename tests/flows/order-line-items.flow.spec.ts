@@ -16,6 +16,8 @@ test.describe.serial('Order lines: add a part, labor and a miscellaneous charge,
   let misc: any;
   let jobCode: { jobCode: string; description: string };
   let miscItem: { description: string; moreInfo: string };
+  // Some dealers (10543) add a $0 SHOP SUPPLIES labor line to every new work order by themselves; it is not one of ours.
+  const ownLabors = (inv: any): any[] => inv.invoiceLabors.filter((l: any) => l.description !== 'SHOP SUPPLIES');
   const invoice = async (request: any) => (await getOrder(request, wo.orderId)).invoices[0];
 
   test('1. Start with a new work order that has no lines and costs nothing', async ({ request }) => {
@@ -24,7 +26,7 @@ test.describe.serial('Order lines: add a part, labor and a miscellaneous charge,
     miscItem = await firstMiscItem(request);
     const inv = await invoice(request);
     expect(inv.invoiceParts).toHaveLength(0);
-    expect(inv.invoiceLabors).toHaveLength(0);
+    expect(ownLabors(inv)).toHaveLength(0);
     expect(inv.invoiceMiscs).toHaveLength(0);
     expect(inv.invoiceAmount).toBe(0);
   });
@@ -62,7 +64,7 @@ test.describe.serial('Order lines: add a part, labor and a miscellaneous charge,
     test.skip(!misc, 'no misc');
     const inv = await invoice(request);
     expect(inv.invoiceParts).toHaveLength(1);
-    expect(inv.invoiceLabors).toHaveLength(1);
+    expect(ownLabors(inv)).toHaveLength(1);
     expect(inv.invoiceMiscs).toHaveLength(1);
     expect(inv.invoiceAmount).toBeCloseTo(PART_PRICE + 55, 2);
   });
@@ -76,7 +78,7 @@ test.describe.serial('Order lines: add a part, labor and a miscellaneous charge,
     const inv = await invoice(request);
     expect(inv.invoiceParts).toHaveLength(1); // changed in place, not added again
     expect(inv.invoiceParts[0].quantitySold).toBe(3);
-    expect(inv.invoiceLabors[0].billedHours).toBe(2);
+    expect(ownLabors(inv)[0].billedHours).toBe(2);
     expect(inv.invoiceMiscs[0].quantitySold).toBe(2);
     expect(inv.invoiceAmount).toBeCloseTo(3 * PART_PRICE + 100 + 2 * 5, 2);
   });
@@ -108,7 +110,7 @@ test.describe.serial('Order lines: add a part, labor and a miscellaneous charge,
     await removeAllLines(request, wo.orderId);
     const inv = await invoice(request);
     expect(inv.invoiceParts).toHaveLength(0);
-    expect(inv.invoiceLabors).toHaveLength(0);
+    expect(ownLabors(inv)).toHaveLength(0);
     expect(inv.invoiceMiscs).toHaveLength(0);
     expect(inv.invoiceAmount).toBe(0);
   });

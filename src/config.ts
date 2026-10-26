@@ -24,6 +24,8 @@ export const config = {
     : process.env.ALLOW_WRITES === 'true' ? [] : ['GET'],
   exclude: list(process.env.EXCLUDE),
   timeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 30000),
+  // Revoking tokens can leave the shared test account unable to log in again (seen on dealer 10543), so those tests can be switched off.
+  skipRevoke: process.env.SKIP_TOKEN_REVOKE === 'true',
   passStatuses: [200, 201, 204],
 };
 

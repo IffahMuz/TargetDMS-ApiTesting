@@ -16,7 +16,9 @@ test.describe.serial('Checkout options: which billing choices does a work order 
   let plainPart: any;
   const state = async (request: any) => {
     const invoice = (await getOrder(request, wo.orderId)).invoices[0];
-    const items = [...invoice.invoiceParts, ...invoice.invoiceLabors, ...invoice.invoiceMiscs, ...invoice.invoiceWGs];
+    // Some dealers (10543) add a $0 SHOP SUPPLIES labor line to every new work order; it is not one of ours, so it is left out.
+    const labors = invoice.invoiceLabors.filter((l: any) => l.description !== 'SHOP SUPPLIES');
+    const items = [...invoice.invoiceParts, ...labors, ...invoice.invoiceMiscs, ...invoice.invoiceWGs];
     return { invoice, s: warrantyState(items), targets: enabledTargets(warrantyState(items)) };
   };
 

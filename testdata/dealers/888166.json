@@ -36,5 +36,22 @@
     "item2": "ffe78ade-28e4-44d2-8391-b3668af2508b",
     "workOrderId": 1077537,
     "jobId": 7839
+  },
+  "searchPart": {
+    "search": "card fee",
+    "partNumber": "CARD FEE",
+    "inventoryPartId": "****CARD FEE"
+  },
+  "categories": {
+    "first": {
+      "id": "Accy",
+      "description": "Accessories"
+    },
+    "secondId": "ATV",
+    "newTotal": 7299
+  },
+  "customerCategoryId": "HomeOwner",
+  "tags": {
+    "inventoryTagId": 1
   }
 }

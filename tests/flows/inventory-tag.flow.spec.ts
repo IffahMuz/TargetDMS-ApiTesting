@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { config, tokenPath } from '../../src/config';
 import { IDS } from '../../src/get-calls/types';
 import { pace } from '../../src/pace';
+import { DATA } from '../../src/testdata';
 
 test.beforeEach(pace);
 
@@ -46,8 +47,8 @@ test.describe.serial('Flow: tag an inventory part -> find it in GetInventory -> 
   };
 
   test('1. Setup: pick a part and create two Inventory-category tags', async ({ request }) => {
-    const body = await inventory(request, { search: 'CARD FEE' });
-    expect(body.data.inventory.length, 'test part CARD FEE not found').toBeGreaterThan(0);
+    const body = await inventory(request, { search: DATA.searchPart.search });
+    expect(body.data.inventory.length, 'test part not found').toBeGreaterThan(0);
     partId = body.data.inventory[0].inventoryPartId;
     expect(partId).toBeTruthy();
     tagA = await createTag(request, 'A');
@@ -79,7 +80,7 @@ test.describe.serial('Flow: tag an inventory part -> find it in GetInventory -> 
     const res = await request.post(assignUrl, { headers, data: { tagIds: [tagA], inventoryParts: [{ inventoryPartId: partId }] }, timeout: config.timeoutMs });
     expect(ok(res), `HTTP ${res.status()}`).toBe(true);
     expect((await json(res)).data.assignedCount).toBe(0);
-    const body = await inventory(request, { search: 'CARD FEE' });
+    const body = await inventory(request, { search: DATA.searchPart.search });
     expect(body.data.inventory[0].tagDetails.filter((t: any) => t.tagId === tagA)).toHaveLength(1);
   });
 
@@ -101,7 +102,7 @@ test.describe.serial('Flow: tag an inventory part -> find it in GetInventory -> 
     expect(body.data.removedCount).toBe(1);
     assignedA = false;
     expect((await inventory(request, { tag: String(tagA) })).data.totalCount).toBe(0);
-    const part = (await inventory(request, { search: 'CARD FEE' })).data.inventory[0];
+    const part = (await inventory(request, { search: DATA.searchPart.search })).data.inventory[0];
     expect(part.tagDetails.map((t: any) => t.tagId)).not.toContain(tagA);
     expect(part.tagDetails.map((t: any) => t.tagId)).toContain(tagB);
   });
@@ -122,7 +123,7 @@ test.describe.serial('Flow: tag an inventory part -> find it in GetInventory -> 
       const del = await request.delete(`${tagUrl}/${id}`, { headers, timeout: config.timeoutMs });
       expect(ok(del), `delete tag ${id}: HTTP ${del.status()}`).toBe(true);
     }
-    const part = (await inventory(request, { search: 'CARD FEE' })).data.inventory[0];
+    const part = (await inventory(request, { search: DATA.searchPart.search })).data.inventory[0];
     expect(part.tagDetails ?? []).toEqual([]);
     tagA = 0;
     tagB = 0;
@@ -144,7 +145,7 @@ test.describe.serial('Flow: tag an inventory part -> find it in GetInventory -> 
 // Validation for the tag assign/remove requests (nothing is changed).
 test.describe('Tag assign validation (inventory targets)', () => {
   test('Assign with no tag ids is rejected with 400', async ({ request }) => {
-    const res = await request.post(assignUrl, { headers, data: { tagIds: [], inventoryParts: [{ inventoryPartId: '****CARD FEE' }] }, timeout: config.timeoutMs });
+    const res = await request.post(assignUrl, { headers, data: { tagIds: [], inventoryParts: [{ inventoryPartId: DATA.searchPart.inventoryPartId }] }, timeout: config.timeoutMs });
     expect(res.status()).toBe(400);
     expect(JSON.stringify(await json(res))).toContain('At least one TagId is required');
   });
@@ -173,7 +174,7 @@ test.describe('Tag assign validation (inventory targets)', () => {
   });
 
   test('Assign an unknown tag id is rejected (not a success status)', async ({ request }) => {
-    const res = await request.post(assignUrl, { headers, data: { tagIds: [99999999], inventoryParts: [{ inventoryPartId: '****CARD FEE' }] }, timeout: config.timeoutMs });
+    const res = await request.post(assignUrl, { headers, data: { tagIds: [99999999], inventoryParts: [{ inventoryPartId: DATA.searchPart.inventoryPartId }] }, timeout: config.timeoutMs });
     expect(config.passStatuses).not.toContain(res.status());
     expect(JSON.stringify(await json(res))).toContain('tags not found');
   });

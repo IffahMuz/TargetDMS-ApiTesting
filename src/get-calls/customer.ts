@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { DATA } from '../testdata';
 import { GetCall, IDS } from './types';
 
 export const customerCalls: GetCall[] = [
@@ -33,11 +34,11 @@ export const customerCalls: GetCall[] = [
     },
   },
   {
-    name: 'Customer categories include HomeOwner',
+    name: 'Customer categories include the test category',
     path: '/api/v1/Customer/Categories/{dealerGuid}',
     check: (data) => {
       expect(data.length).toBeGreaterThan(0);
-      expect(data.map((c: any) => c.customerCategoryId)).toContain('HomeOwner');
+      expect(data.map((c: any) => c.customerCategoryId)).toContain(DATA.customerCategoryId);
     },
   },
   {

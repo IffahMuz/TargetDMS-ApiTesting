@@ -36,5 +36,24 @@
     "item2": "0b820008-a74f-44c8-97db-c2e23039f2b0",
     "workOrderId": 27956,
     "jobId": 12481
-  }
+  },
+  "tags": {
+    "inventoryTagId": 170,
+    "inventoryTagPartId": "ARI1001",
+    "publicTagId": 169
+  },
+  "searchPart": {
+    "search": "10010004920",
+    "partNumber": "10010004920",
+    "inventoryPartId": "ECH10010004920"
+  },
+  "categories": {
+    "first": {
+      "id": "Accessry",
+      "description": "Accessories"
+    },
+    "secondId": "Aerator",
+    "newTotal": 4297
+  },
+  "customerCategoryId": "Bank"
 }
