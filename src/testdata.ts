@@ -11,6 +11,8 @@ export const DATA: {
   warrantor: { id: string; name: string };
   /** A wholegood unit with status Available (units that are Sold, On Order or for rent have no receipt and cannot be added to an order). addable=false when the dealer has none. */
   unit: { inventoryWGId: string; manufacturerId: string; make: string; model: string; serialNumber: string; addable: boolean };
+  /** Serial number of a unit owned by the test customer (and by nobody else), for the customer unit lookup. */
+  ownedUnitSerial: string;
   /** A unit that cannot be sold from stock (Sold / On Order). */
   unavailableUnit: { inventoryWGId: string; manufacturerId: string; make: string; model: string; serialNumber: string };
   purchaseOrderId: number;

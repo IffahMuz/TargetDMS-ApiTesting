@@ -22,10 +22,10 @@ export const customerPostCalls: PostCall[] = [
   {
     name: 'Lookup by serial number only returns that unit',
     path,
-    body: { dealerId: IDS.dealerId, customerId: 0, serialNumber: DATA.unit.serialNumber },
+    body: { dealerId: IDS.dealerId, customerId: 0, serialNumber: DATA.ownedUnitSerial },
     check: (data) => {
       expect(data).toHaveLength(1);
-      expect(data[0].serialNumber).toBe(DATA.unit.serialNumber);
+      expect(data[0].serialNumber).toBe(DATA.ownedUnitSerial);
       expect(data[0].customer.customerId).toBe(IDS.customerId);
     },
   },

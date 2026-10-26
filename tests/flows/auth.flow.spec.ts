@@ -22,6 +22,7 @@ test.describe.serial('Flow: login -> use token -> validate -> refresh -> revoke'
   });
 
   test('1. Login with valid credentials returns an access token and a refresh token', async ({ request }) => {
+    test.skip(config.singleLogin, 'SINGLE_LOGIN=true: only global setup logs in');
     const res = await request.post(`${api}/Auth/Login`, {
       data: { dmsDealerId: config.dmsDealerId || undefined, userName: config.username, password: config.password },
       timeout: config.timeoutMs,
@@ -41,7 +42,7 @@ test.describe.serial('Flow: login -> use token -> validate -> refresh -> revoke'
     const res = await request.get(`${api}/User`, { headers: bearer(accessToken), timeout: config.timeoutMs });
     const body = await json(res);
     expect(config.passStatuses, `HTTP ${res.status()}`).toContain(res.status());
-    expect(body.data.userName).toBe('Admin');
+    expect(body.data.userName).toBe(config.username);
     expect(body.data.dealerId).toBe(config.dealerId);
   });
 
@@ -93,6 +94,7 @@ test.describe.serial('Flow: login -> use token -> validate -> refresh -> revoke'
 // Validation that never reaches the identity server, so it cannot lock the account.
 test.describe('Login validation', () => {
   test('Login without a username is rejected with 400', async ({ request }) => {
+    test.skip(config.singleLogin, 'SINGLE_LOGIN=true: only global setup logs in');
     const res = await request.post(`${api}/Auth/Login`, { data: { dmsDealerId: config.dmsDealerId || undefined, password: 'x' }, timeout: config.timeoutMs });
     expect(res.status()).toBe(400);
     expect(JSON.stringify(await json(res)).toLowerCase()).toContain('username');

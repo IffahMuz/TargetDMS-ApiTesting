@@ -61,5 +61,6 @@
     "make": "Animal Health International",
     "model": "hi",
     "serialNumber": "Y576576"
-  }
+  },
+  "ownedUnitSerial": "Y576576"
 }

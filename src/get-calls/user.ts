@@ -1,12 +1,13 @@
 import { expect } from '@playwright/test';
+import { config } from '../config';
 import { GetCall, IDS } from './types';
 
 export const userCalls: GetCall[] = [
   {
-    name: 'Current user profile is the Admin user',
+    name: 'Current user profile is the logged-in user',
     path: '/api/v1/User',
     check: (data) => {
-      expect(data.userName).toBe('Admin');
+      expect(data.userName.toLowerCase()).toBe(config.username.toLowerCase());
       expect(data.dealerId).toBe(IDS.dealerId);
       expect(Array.isArray(data.userRoles)).toBe(true);
     },

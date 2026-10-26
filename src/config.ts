@@ -25,7 +25,9 @@ export const config = {
   exclude: list(process.env.EXCLUDE),
   timeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 30000),
   // Revoking tokens can leave the shared test account unable to log in again (seen on dealer 10543), so those tests can be switched off.
-  skipRevoke: process.env.SKIP_TOKEN_REVOKE === 'true',
+  skipRevoke: process.env.SKIP_TOKEN_REVOKE === 'true' || process.env.SINGLE_LOGIN === 'true',
+  // SINGLE_LOGIN=true: global setup is the only thing that calls Auth/Login, so the tests that log in again are skipped.
+  singleLogin: process.env.SINGLE_LOGIN === 'true',
   passStatuses: [200, 201, 204],
 };
 
