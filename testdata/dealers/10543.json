@@ -22,11 +22,12 @@
     "name": "Ferris Warranty"
   },
   "unit": {
-    "inventoryWGId": "5480",
-    "manufacturerId": "FER",
-    "make": "FER",
-    "model": "5901587",
-    "serialNumber": "STOCK-15/05/26/02"
+    "inventoryWGId": "5295",
+    "manufacturerId": "SIM",
+    "make": "SIMPLICITY",
+    "model": "1695305",
+    "serialNumber": "2012635951",
+    "addable": true
   },
   "purchaseOrderId": 3674,
   "inspection": {
@@ -55,5 +56,12 @@
     "secondId": "Aerator",
     "newTotal": 4297
   },
-  "customerCategoryId": "Bank"
+  "customerCategoryId": "Bank",
+  "unavailableUnit": {
+    "inventoryWGId": "997",
+    "manufacturerId": "****",
+    "make": "Non-Inventory",
+    "model": "DG-38353",
+    "serialNumber": "7CTJ-4001940"
+  }
 }

@@ -15,12 +15,15 @@ export const orderCalls: GetCall[] = [
     },
   },
   {
+    // WithCount=true is what the web app sends; without it the server answers 500 as soon as an order matches (see tests/defects).
     name: 'List orders (filtered, paged)',
     path: '/api/v1/Order/All/{dealerGuid}',
-    query: { OrderId: IDS.orderId, CustomerId: IDS.customerId, PageNumber: 1, PageSize: 10 },
+    query: { CustomerId: IDS.customerId, WithCount: 'true', PageNumber: 1, PageSize: 10 },
     check: (data) => {
-      expect(data).toHaveProperty('totalCount');
-      expect(Array.isArray(data.orders)).toBe(true);
+      expect(data.totalCount).toBeGreaterThan(0);
+      expect(data.orders.length).toBeGreaterThan(0);
+      expect(data.orders.length).toBeLessThanOrEqual(10);
+      for (const order of data.orders) expect(order.customerId).toBe(IDS.customerId);
     },
   },
   {

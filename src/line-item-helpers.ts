@@ -31,7 +31,9 @@ export const miscBody = (wo: WorkOrder, item: { description: string; moreInfo: s
 });
 
 /** The test customer's unit (see testdata/dealers/<dealerId>.json). A wholegood line only references it; nothing is checked out. */
-export const WG_UNIT = { ...DATA.unit };
+const { addable: _addable, ...unitFields } = DATA.unit;
+export const WG_UNIT = unitFields;
+export const WG_UNAVAILABLE_UNIT = { ...DATA.unavailableUnit };
 export const WG_PRICE = 100;
 
 export const wgBody = (wo: WorkOrder, over: Record<string, unknown> = {}) => ({

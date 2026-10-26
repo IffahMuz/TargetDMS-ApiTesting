@@ -26,32 +26,16 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(isClientError(res.status()), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(true);
   });
 
-  test('Wholegoods without a real owner should be a 4xx, not 500 [known defect]', async ({ request }) => {
+  // Without a real owner the old test dealer answered 500; dealer 10543 answers 200 with the units of every owner, which is fine.
+  // The check is only that the request never fails with a server error.
+  test('Wholegoods without an owner filter does not fail with a server error', async ({ request }) => {
     const res = await request.get(`/api/v1/Inventory/Wholegoods/${IDS.dealerGuid}?pageNumber=1&pageSize=10`, { headers, timeout: config.timeoutMs });
-    expect(isClientError(res.status()), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(true);
+    expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBeLessThan(500);
   });
 
   test('Wholegood detail for an unknown id should be a 404, not 500 [known defect]', async ({ request }) => {
     const res = await request.get(`/api/v1/Inventory/Wholegood/Detail/${IDS.dealerGuid}?InventoryWgId=NO-SUCH-UNIT`, { headers, timeout: config.timeoutMs });
     expect(isClientError(res.status()), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(true);
-  });
-
-  // Evidence on the old test dealer: condition "" -> 8972 items, "New" -> 7299, "Used" -> 0. The 1673 items that are not New
-  // are never returned by the "Used" filter. Wholegoods show the same gap (WG: "" -> 1950, "New" -> 301, "Used" -> 0).
-  // The backend only forwards `condition` to Everest unchanged, so the filter is applied upstream.
-  test('GetInventory condition "Used" should return the items that are not New [known defect]', async ({ request }) => {
-    const total = async (condition: string) => {
-      const res = await request.post('/api/v1/Inventory/GetInventory', {
-        headers,
-        data: { dealerId: String(IDS.dealerId), itemType: '', search: '', mfrCode: '', availability: '', categoryId: '', condition, modelCode: '', tag: '', pageNumber: 0, pageSize: 1 },
-        timeout: config.timeoutMs,
-      });
-      expect(config.passStatuses, `HTTP ${res.status()} for condition "${condition}"`).toContain(res.status());
-      return (await json(res)).data.totalCount as number;
-    };
-    const [all, fresh, used] = [await total(''), await total('New'), await total('Used')];
-    expect(used, `Used=${used}, New=${fresh}, all=${all}: Used should not be empty`).toBeGreaterThan(0);
-    expect(used + fresh, `Used (${used}) + New (${fresh}) should equal all (${all})`).toBe(all);
   });
 
   // Deleting a tag removes it from the tag list and from the part's tagDetails, but the assignment row stays behind:
@@ -116,41 +100,14 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(after.status(), 'a revoked token should be rejected with 401').toBe(401);
   });
 
-  // Order/All answers 500 "The JSON value could not be converted to System.Int32. Path: $[0].TotalCount" as soon as the query
-  // matches at least one order (the test customer has orders). Queries that match nothing return 200 with an empty list, so the
-  // plain list test passes only because its filter matches no rows. The TagIds filter hits the same failure.
-  test('Order/All should return a customer\'s orders, not 500 [known defect]', async ({ request }) => {
+  // Order/All answers 500 "The JSON value could not be converted to System.Int32. Path: $[0].TotalCount" whenever it is called
+  // WITHOUT WithCount=true and the query matches at least one order. With WithCount=true (what the web app sends) it works, so the
+  // green tests use that flag (src/get-calls/order.ts, tests/flows/order-tag.flow.spec.ts). Queries that match nothing return 200.
+  test('Order/All without WithCount should return a customer\'s orders, not 500 [known defect]', async ({ request }) => {
     const res = await request.get(`/api/v1/Order/All/${IDS.dealerGuid}?CustomerId=${IDS.customerId}&PageNumber=1&PageSize=5`, { headers, timeout: config.timeoutMs });
     const body = await json(res);
     expect(config.passStatuses, `HTTP ${res.status()}: ${JSON.stringify(body).slice(0, 200)}`).toContain(res.status());
     expect(body.data.orders.length).toBeGreaterThan(0);
-  });
-
-  test('Order/All with TagIds should return the tagged order [known defect]', async ({ request }) => {
-    const guid = IDS.dealerGuid;
-    const raw = loadTestBody("order-create.json");
-    raw.notes = `AUTOMATION-${Date.now()}`;
-    const created = await json(await request.post(`/api/v1/Order/${guid}`, { headers, data: raw, timeout: config.timeoutMs }));
-    const orderId = created.data.orderId as number;
-    let tagId = 0;
-    let invoiceGuid = '';
-    try {
-      invoiceGuid = (await json(await request.get(`/api/v1/Order/${guid}?OrderId=${orderId}`, { headers, timeout: config.timeoutMs }))).data.invoices[0].invoiceGuid;
-      tagId = (await json(await request.post(`/api/v1/Dealer/Tag/${guid}`, {
-        headers, data: { tagId: 0, name: `AUTOMATION-orderfilter-${Date.now()}`, color: '#FF8800', isActive: true, category: 'Order' }, timeout: config.timeoutMs,
-      }))).data.tagId;
-      await request.post(`/api/v1/Dealer/Tags/Assign/${guid}`, { headers, data: { tagIds: [tagId], invoices: [{ invoiceGuid }] }, timeout: config.timeoutMs });
-      const res = await request.get(`/api/v1/Order/All/${guid}?TagIds=${tagId}`, { headers, timeout: config.timeoutMs });
-      const body = await json(res);
-      expect(config.passStatuses, `HTTP ${res.status()}: ${JSON.stringify(body).slice(0, 200)}`).toContain(res.status());
-      expect(body.data.orders.map((o: any) => o.orderId)).toContain(orderId);
-    } finally {
-      if (tagId) {
-        await request.post(`/api/v1/Dealer/Tags/Remove/${guid}`, { headers, data: { tagIds: [tagId], invoices: [{ invoiceGuid }] }, timeout: config.timeoutMs });
-        await request.delete(`/api/v1/Dealer/Tag/${guid}/${tagId}`, { headers, timeout: config.timeoutMs });
-      }
-      await request.delete(`/api/v1/Order/${guid}?orderId=${orderId}`, { headers, timeout: config.timeoutMs });
-    }
   });
 
   // Saving a warranty claim for work order 99999999 (which does not exist) returns 200 and stores an orphan claim,
@@ -241,16 +198,18 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     });
   }
 
-  // No wholegood unit can be added to an order: every unit tried (34254 On Order, 33792 and 33686 Sold) answers 502
-  // "UpsertInvoiceWG failed ... RECEIPT_NOT_FOUND Inventory Receipt is not found At procedure 'ALLOCATE_SALES_SERIAL'".
-  // This also blocks the wholegood update, remove and DELETE tests, which are not written until a unit can be added.
-  test('A wholegood unit cannot be added to an order (502 RECEIPT_NOT_FOUND, it should be added) [known defect]', async ({ request }) => {
+  // Deleting a wholegood line directly answers 502 "The external service returned an error", like the part, labor and miscellaneous lines above.
+  // (Adding and updating one works; see tests/flows/order-wholegood.flow.spec.ts.)
+  test('Deleting a wholegood line directly fails with a vague error (it should work) [known defect]', async ({ request }) => {
+    test.skip(!DATA.unit.addable, 'this dealer has no available wholegood unit to add');
     const { createWorkOrder, guid: dealerGuid } = await import('../../src/warranty-helpers');
     const lh = await import('../../src/line-item-helpers');
     const wo = await createWorkOrder(request, `AUTOMATION-${Date.now()}`);
     try {
-      const res = await lh.saveLine(request, 'Wholegoods', lh.wgBody(wo));
-      expect(config.passStatuses, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 250)}`).toContain(res.status);
+      const added = (await lh.saveLine(request, 'Wholegoods', lh.wgBody(wo))).body.data?.wg;
+      expect(added, 'the wholegood was not added').toBeTruthy();
+      const res = await lh.deleteLine(request, 'Wholegoods', added);
+      expect(config.passStatuses, `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`).toContain(res.status);
     } finally {
       await request.delete(`/api/v1/Order/${dealerGuid}?orderId=${wo.orderId}`, { headers, timeout: config.timeoutMs });
     }

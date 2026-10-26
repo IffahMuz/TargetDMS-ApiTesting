@@ -60,6 +60,14 @@ test.describe.serial('Flow: tag an order invoice -> assign -> remove -> clean up
     assigned = true;
   });
 
+  test('2b. Order/All filtered by the tag (with WithCount=true, as the web app sends it) returns the tagged order', async ({ request }) => {
+    test.skip(!assigned, 'tag was not assigned');
+    const res = await request.get(`/api/v1/Order/All/${guid}?TagIds=${tagId}&WithCount=true`, { headers, timeout: config.timeoutMs });
+    const body = await json(res);
+    expect(config.passStatuses, `HTTP ${res.status()}: ${JSON.stringify(body).slice(0, 200)}`).toContain(res.status());
+    expect(body.data.orders.map((o: any) => o.orderId)).toContain(orderId);
+  });
+
   test('3. Assigning the same tag again assigns 0', async ({ request }) => {
     test.skip(!assigned, 'tag was not assigned');
     const res = await request.post(assignUrl, { headers, data: { tagIds: [tagId], invoices: [{ invoiceGuid }] }, timeout: config.timeoutMs });

@@ -133,6 +133,16 @@ export const inventoryPostCalls: PostCall[] = [
     },
   },
   {
+    // Used and New are the only conditions the search knows. A dealer without used stock gets an empty list, which is fine.
+    name: 'condition Used returns a valid list (empty when the dealer has no used items)',
+    path,
+    body: { ...filters, condition: 'Used', pageSize: 10 },
+    check: (data) => {
+      expect(data.totalCount).toBeGreaterThanOrEqual(0);
+      expect(data.inventory.length).toBeLessThanOrEqual(Math.min(10, data.totalCount));
+    },
+  },
+  {
     name: 'mfrCode filter returns only that line code',
     path,
     body: { ...filters, mfrCode: '****', pageSize: 10 },

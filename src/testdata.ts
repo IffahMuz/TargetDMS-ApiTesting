@@ -9,7 +9,10 @@ export const DATA: {
   part: { make: string; number: string; description: string; price: number };
   pricePart: { make: string; number: string };
   warrantor: { id: string; name: string };
-  unit: { inventoryWGId: string; manufacturerId: string; make: string; model: string; serialNumber: string };
+  /** A wholegood unit with status Available (units that are Sold, On Order or for rent have no receipt and cannot be added to an order). addable=false when the dealer has none. */
+  unit: { inventoryWGId: string; manufacturerId: string; make: string; model: string; serialNumber: string; addable: boolean };
+  /** A unit that cannot be sold from stock (Sold / On Order). */
+  unavailableUnit: { inventoryWGId: string; manufacturerId: string; make: string; model: string; serialNumber: string };
   purchaseOrderId: number;
   searchPart: { search: string; partNumber: string; inventoryPartId: string };
   categories: { first: { id: string; description: string }; secondId: string; newTotal: number };

@@ -26,7 +26,8 @@
     "manufacturerId": "AHI",
     "make": "Animal Health International",
     "model": "hi",
-    "serialNumber": "Y576576"
+    "serialNumber": "Y576576",
+    "addable": false
   },
   "purchaseOrderId": 6240,
   "inspection": {
@@ -53,5 +54,12 @@
   "customerCategoryId": "HomeOwner",
   "tags": {
     "inventoryTagId": 1
+  },
+  "unavailableUnit": {
+    "inventoryWGId": "34254",
+    "manufacturerId": "AHI",
+    "make": "Animal Health International",
+    "model": "hi",
+    "serialNumber": "Y576576"
   }
 }
