@@ -1,10 +1,10 @@
 {
-  "dealerId": 888166,
+  "dealerId": {{DEALER_ID}},
   "orderId": 0,
   "orderGuid": "00000000-0000-0000-0000-000000000000",
   "orderTypeId": 2,
   "orderStatusId": 3,
-  "customerId": 17395,
+  "customerId": {{CUSTOMER_ID}},
   "serviceWriterId": "",
   "salesRepId": "",
   "workOrderId": 0,
@@ -18,7 +18,7 @@
   "lastUpdatedEverest": "{{NOW}}",
   "invoices": [
     {
-      "dealerId": 888166,
+      "dealerId": {{DEALER_ID}},
       "invoiceId": 0,
       "invoiceGuid": "00000000-0000-0000-0000-000000000000",
       "orderId": 0,
@@ -31,7 +31,7 @@
       "hasWorkOrder": true,
       "hasSalesDeal": false,
       "hasRental": false,
-      "customerId": 17395,
+      "customerId": {{CUSTOMER_ID}},
       "invoiceTaxes": 0,
       "originalInvoiceId": 0,
       "isActive": true,
@@ -57,7 +57,7 @@
       },
       "workOrderJobs": [
         {
-          "dealerId": 888166,
+          "dealerId": {{DEALER_ID}},
           "jobId": 0,
           "jobNumber": 1,
           "workOrderId": 0,

@@ -7,6 +7,9 @@ export default async function globalSetup() {
   fs.mkdirSync(cacheDir, { recursive: true });
   if (!config.baseUrl) throw new Error('API_BASE_URL is not set (see .env.example)');
 
+  const missing = (['dealerGuid', 'dealerId', 'locationDmsId', 'customerId'] as const).filter((k) => !config[k]);
+  if (missing.length) throw new Error(`Dealer settings missing in .env (see .env.example): ${missing.join(', ')}`);
+
   const basic: Record<string, string> = config.swaggerUser
     ? { Authorization: 'Basic ' + Buffer.from(`${config.swaggerUser}:${config.swaggerPassword}`).toString('base64') }
     : {};

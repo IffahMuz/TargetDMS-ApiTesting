@@ -3,6 +3,7 @@ import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';
+import { loadTestBody } from '../../src/testdata';
 import { pace } from '../../src/pace';
 
 test.beforeEach(pace);
@@ -18,8 +19,7 @@ const json = async (res: APIResponse): Promise<any> => res.json().catch(() => ({
 const ok = (res: APIResponse) => config.passStatuses.includes(res.status());
 
 function orderBody(marker: string) {
-  const raw = fs.readFileSync(path.resolve(__dirname, '..', '..', 'testdata', 'order-create.json'), 'utf8');
-  const body = JSON.parse(raw.split('{{NOW}}').join(new Date().toISOString().slice(0, 19)));
+  const body = loadTestBody("order-create.json");
   body.notes = marker;
   body.poNumber = 'AUTO-TAG';
   return body;

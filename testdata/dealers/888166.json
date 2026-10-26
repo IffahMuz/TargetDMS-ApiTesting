@@ -1,0 +1,40 @@
+{
+  "ids": {
+    "workOrderId": 1077508,
+    "orderId": 1077536,
+    "userId": "035a3f14-03e9-ed11-9f73-00224846c390",
+    "roleId": "e601fec0-1feb-444b-d020-08de52963141",
+    "inspectionSessionId": "9fd41f0e-c072-4127-aa43-4927443642f4",
+    "invoiceGuid": "ece86b36-3104-451c-9ce3-65cfc7219415"
+  },
+  "part": {
+    "make": "ECHO",
+    "number": "62349",
+    "description": "PROMO EDGER BLADE",
+    "price": 2.29
+  },
+  "pricePart": {
+    "make": "ARC",
+    "number": "0100-032"
+  },
+  "warrantor": {
+    "id": "GRAVELY",
+    "name": "ARIENS COMPANY"
+  },
+  "unit": {
+    "inventoryWGId": "34254",
+    "manufacturerId": "AHI",
+    "make": "Animal Health International",
+    "model": "hi",
+    "serialNumber": "Y576576"
+  },
+  "purchaseOrderId": 6240,
+  "inspection": {
+    "templateId": "c02c1860-f52e-4df2-9398-f70ecd064fca",
+    "moduleId": "8d771643-fde1-4e3c-a09a-4b294eee3beb",
+    "item1": "02faf8b1-3f0a-4fa7-b46f-bc96f2bca15c",
+    "item2": "ffe78ade-28e4-44d2-8391-b3668af2508b",
+    "workOrderId": 1077537,
+    "jobId": 7839
+  }
+}

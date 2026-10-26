@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { GetCall, IDS } from './types';
+import { DATA } from '../testdata';
 
 const pagedItems = (data: any) => {
   expect(data.pageNumber).toBe(1);
@@ -88,9 +89,9 @@ export const inventoryCalls: GetCall[] = [
   {
     name: 'Wholegood detail for a known unit',
     path: '/api/v1/Inventory/Wholegood/Detail/{dealerGuid}',
-    query: { InventoryWgId: '34254', DealerId: IDS.dealerId },
+    query: { InventoryWgId: DATA.unit.inventoryWGId, DealerId: IDS.dealerId },
     check: (data) => {
-      expect(data.inventoryWGId).toBe('34254');
+      expect(data.inventoryWGId).toBe(DATA.unit.inventoryWGId);
       expect(data.dealerId).toBe(IDS.dealerId);
       expect(data).toHaveProperty('serialNumber');
     },

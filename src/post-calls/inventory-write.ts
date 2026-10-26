@@ -1,9 +1,10 @@
 import { expect } from '@playwright/test';
 import { IDS, PostCall } from './types';
+import { DATA } from '../testdata';
 
 // POST /Inventory/CustomersPrices is a read-only price lookup.
 const prices = '/api/v1/Inventory/CustomersPrices/{dealerGuid}';
-const priceBody = { customerID: String(IDS.customerId), products: [{ mfrID: 'ARC', partNumber: '0100-032' }] };
+const priceBody = { customerID: String(IDS.customerId), products: [{ mfrID: DATA.pricePart.make, partNumber: DATA.pricePart.number }] };
 
 // POST /Inventory/Unit and /Inventory/Model create PERMANENT records (there is no delete endpoint),
 // so only validation failures are tested: each body below breaks exactly ONE rule and must be rejected before anything is saved.
@@ -46,14 +47,14 @@ export const inventoryWritePostCalls: PostCall[] = [
     body: priceBody,
     check: (data) => {
       expect(data).toHaveLength(1);
-      expect(data[0]).toMatchObject({ mfrID: 'ARC', partNumber: '0100-032', success: true });
+      expect(data[0]).toMatchObject({ mfrID: DATA.pricePart.make, partNumber: DATA.pricePart.number, success: true });
       expect(data[0].price).toBeGreaterThan(0);
     },
   },
   {
     name: 'Customer price for an unknown part says it was not found',
     path: prices,
-    body: { ...priceBody, products: [{ mfrID: 'ARC', partNumber: 'ZZZ-NO-SUCH-PART' }] },
+    body: { ...priceBody, products: [{ mfrID: DATA.pricePart.make, partNumber: 'ZZZ-NO-SUCH-PART' }] },
     check: (data) => {
       expect(data[0].success).toBe(false);
       expect(data[0].error).toContain('Product not found');

@@ -2,6 +2,7 @@ import { expect, APIResponse } from '@playwright/test';
 import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import { config, tokenPath } from '../../src/config';
+import { DATA, loadTestBody } from '../../src/testdata';
 import { IDS } from '../../src/get-calls/types';
 import { pace } from '../../src/pace';
 
@@ -35,7 +36,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(isClientError(res.status()), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(true);
   });
 
-  // Evidence on dealer 888166: condition "" -> 8972 items, "New" -> 7299, "Used" -> 0. The 1673 items that are not New
+  // Evidence on the old test dealer: condition "" -> 8972 items, "New" -> 7299, "Used" -> 0. The 1673 items that are not New
   // are never returned by the "Used" filter. Wholegoods show the same gap (WG: "" -> 1950, "New" -> 301, "Used" -> 0).
   // The backend only forwards `condition` to Everest unchanged, so the filter is applied upstream.
   test('GetInventory condition "Used" should return the items that are not New [known defect]', async ({ request }) => {
@@ -115,7 +116,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
   });
 
   // Order/All answers 500 "The JSON value could not be converted to System.Int32. Path: $[0].TotalCount" as soon as the query
-  // matches at least one order (CustomerId=17395 has orders). Queries that match nothing return 200 with an empty list, so the
+  // matches at least one order (the test customer has orders). Queries that match nothing return 200 with an empty list, so the
   // plain list test passes only because its filter matches no rows. The TagIds filter hits the same failure.
   test('Order/All should return a customer\'s orders, not 500 [known defect]', async ({ request }) => {
     const res = await request.get(`/api/v1/Order/All/${IDS.dealerGuid}?CustomerId=${IDS.customerId}&PageNumber=1&PageSize=5`, { headers, timeout: config.timeoutMs });
@@ -126,7 +127,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
 
   test('Order/All with TagIds should return the tagged order [known defect]', async ({ request }) => {
     const guid = IDS.dealerGuid;
-    const raw = JSON.parse(require('fs').readFileSync(require('path').resolve(__dirname, '..', '..', 'testdata', 'order-create.json'), 'utf8').split('{{NOW}}').join(new Date().toISOString().slice(0, 19)));
+    const raw = loadTestBody("order-create.json");
     raw.notes = `AUTOMATION-${Date.now()}`;
     const created = await json(await request.post(`/api/v1/Order/${guid}`, { headers, data: raw, timeout: config.timeoutMs }));
     const orderId = created.data.orderId as number;
@@ -157,7 +158,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     const claims = `/api/v1/Dealer/WarrantyClaims/${IDS.dealerGuid}`;
     const missingWo = 99999999;
     const body = {
-      warrantyClaimId: null, warrantorId: 'GRAVELY', claimType: 'W', claimNumber: 'AUTO-ORPHAN', subtotal: 0, tax: 0, total: 0,
+      warrantyClaimId: null, warrantorId: DATA.warrantor.id, claimType: 'W', claimNumber: 'AUTO-ORPHAN', subtotal: 0, tax: 0, total: 0,
       failedDate: '2026-10-01T00:00:00', modelNumber: 'MODEL-X', mfrId: 'STI', serialNumber: 'SN-AUTO-1', failedPartName: 'Blade',
     };
     const res = await request.post(`${claims}?WorkOrderId=${missingWo}`, { headers, data: body, timeout: config.timeoutMs });
@@ -298,7 +299,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
   // Inventory count update: UpdateInventoryCountItemValidator says itemId > 0, quantity >= 0, binLocation <= 40 chars and safe input,
   // but the body is an array, so those rules are never applied. Bad values reach the upstream system instead: some come back as a vague 502,
   // a long bin location leaks a database error, and an unsafe bin location is accepted. These use an item and count that cannot exist.
-  const countUrl = (id: number) => `/api/v1/Inventory/Count/${'c4cf2b83-1e4a-4f89-b3da-82df1ad411cd'}/${id}`;
+  const countUrl = (id: number) => `/api/v1/Inventory/Count/${config.dealerGuid}/${id}`;
   const badUpdates: [string, unknown][] = [
     ['an item number of 0', [{ itemId: 0, quantity: 1, binLocation: 'A' }]],
     ['a negative quantity', [{ itemId: 999999999, quantity: -1, binLocation: 'A' }]],
@@ -343,7 +344,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
   ];
   for (const [what, items] of badReceives) {
     test(`Receiving a purchase order with ${what} should be a clean 400 [known defect]`, async ({ request }) => {
-      const res = await poReceive(request, 6240, items);
+      const res = await poReceive(request, DATA.purchaseOrderId, items);
       expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 160)}`).toBe(400);
     });
   }
@@ -380,7 +381,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     request.post(`/api/v1/Notification/${path}`, { headers, data, timeout: config.timeoutMs });
 
   test('Sending a receipt email for an order that does not exist shows a JSON parser error (it should say "Details not found") [known defect]', async ({ request }) => {
-    const res = await notify(request, 'SendReceiptToEmail', { dmsDealerId: 199301001, dealerId: IDS.dealerId, orderId: 999999999, customerId: 999999999, invoiceId: 999999999 });
+    const res = await notify(request, 'SendReceiptToEmail', { dmsDealerId: config.locationDmsId, dealerId: IDS.dealerId, orderId: 999999999, customerId: 999999999, invoiceId: 999999999 });
     const text = JSON.stringify(await json(res));
     expect(isClientError(res.status()), `HTTP ${res.status()}: ${text.slice(0, 200)}`).toBe(true);
     expect(text).not.toMatch(/JSON token|LineNumber/i);
@@ -390,7 +391,7 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
   // The request below is for a customer that does not exist (404 "Data not found"), which proves the link got past validation without sending anything.
   test('A file link on https://targetumh.evil.com passes the trusted-domain check (it should be refused with 400) [known defect]', async ({ request }) => {
     const res = await notify(request, 'SendFilesToEmail', {
-      dmsDealerId: 199301001, dealerId: IDS.dealerId, customerId: 999999999,
+      dmsDealerId: config.locationDmsId, dealerId: IDS.dealerId, customerId: 999999999,
       files: [{ fileName: 'a.png', fileUrl: 'https://targetumh.evil.com/a.png', fileType: 'image/png' }],
     });
     expect(res.status(), `HTTP ${res.status()}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(400);

@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { IDS, PostCall } from './types';
+import { DATA } from '../testdata';
 
 // POST /Customer/GetCustomerUnits is a read-only lookup (POST is used only to carry the search body).
 const path = '/api/v1/Customer/GetCustomerUnits';
@@ -21,10 +22,10 @@ export const customerPostCalls: PostCall[] = [
   {
     name: 'Lookup by serial number only returns that unit',
     path,
-    body: { dealerId: IDS.dealerId, customerId: 0, serialNumber: 'Y576576' },
+    body: { dealerId: IDS.dealerId, customerId: 0, serialNumber: DATA.unit.serialNumber },
     check: (data) => {
       expect(data).toHaveLength(1);
-      expect(data[0].serialNumber).toBe('Y576576');
+      expect(data[0].serialNumber).toBe(DATA.unit.serialNumber);
       expect(data[0].customer.customerId).toBe(IDS.customerId);
     },
   },

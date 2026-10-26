@@ -3,6 +3,7 @@ import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';
+import { loadTestBody } from '../../src/testdata';
 import { pace } from '../../src/pace';
 
 test.beforeEach(pace);
@@ -16,8 +17,7 @@ const pick = (o: any, key: string) => o?.[key] ?? o?.[key[0].toUpperCase() + key
 
 function buildBody(file: string, marker: string) {
   const now = new Date().toISOString().slice(0, 19);
-  const raw = fs.readFileSync(path.resolve(__dirname, '..', '..', 'testdata', file), 'utf8');
-  const body = JSON.parse(raw.split('{{NOW}}').join(now));
+  const body = loadTestBody(file);
   body.notes = marker; // makes automation orders easy to spot
   body.poNumber = marker.slice(0, 20);
   return body;

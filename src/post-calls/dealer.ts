@@ -1,9 +1,10 @@
 import { expect } from '@playwright/test';
+import { config } from '../config';
 import { IDS, PostCall } from './types';
 
 // POST /Dealer/GetDealers is deprecated (backend points to Dealer/Locations) but still live; it is a read-only lookup.
 // The DMS dealer id that owns the test locations (Dealer/Locations reports it); differs from the id used at login.
-const dmsDealerId = 199301001;
+const dmsDealerId = config.locationDmsId;
 const getDealers = '/api/v1/Dealer/GetDealers';
 // POST /Dealer/JobCode creates a permanent job code and there is no delete endpoint,
 // so only validation failures are tested: each body breaks exactly ONE rule and must be rejected before anything is saved.
@@ -13,7 +14,7 @@ const rejected = (needle: string) => (body: any) => expect(JSON.stringify(body))
 
 export const dealerPostCalls: PostCall[] = [
   {
-    // dealerId 0 means "all locations of the DMS dealer"; a specific dealerId such as 888166 returns an empty list.
+    // dealerId 0 means "all locations of the DMS dealer"; a specific dealerId such as the location dealerId returns an empty list.
     name: 'Dealers lookup returns the test dealer location with id, guid and name',
     path: getDealers,
     body: { dmsDealerId, dealerId: 0 },
@@ -29,7 +30,7 @@ export const dealerPostCalls: PostCall[] = [
   {
     name: 'Dealers lookup for a dmsDealerId the user does not own is rejected with 403',
     path: getDealers,
-    body: { dmsDealerId: 888166, dealerId: 0 },
+    body: { dmsDealerId: config.dealerId, dealerId: 0 },
     expectStatus: [403],
     check: rejected('Dealer authorization failed'),
   },

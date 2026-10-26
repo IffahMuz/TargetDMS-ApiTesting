@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, specPath } from './config';
+import { DATA } from './testdata';
 import { resolveRef, sampleFromSchema } from './samples';
 
 export interface Operation {
@@ -26,11 +27,12 @@ function loadOverrides(): Overrides {
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 }
 
-function loadParamDefaults(): Record<string, any> {
-  const file = path.resolve(__dirname, '..', 'testdata', 'params.json');
-  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).values ?? {} : {};
-}
-const paramDefaults = loadParamDefaults();
+// dealerid and customerid come from .env so switching dealers does not need a params.json edit
+const paramDefaults: Record<string, any> = {
+  dealerid: config.dealerId, customerid: config.customerId,
+  workorderid: DATA.ids.workOrderId, orderid: DATA.ids.orderId, userid: DATA.ids.userId, roleid: DATA.ids.roleId,
+  inspectionsessionid: DATA.ids.inspectionSessionId, invoiceguid: DATA.ids.invoiceGuid,
+};
 
 function paramValue(spec: any, param: any, source: 'path' | 'query'): any {
   const name: string = param.name;

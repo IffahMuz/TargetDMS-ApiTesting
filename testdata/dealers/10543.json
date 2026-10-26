@@ -1,0 +1,40 @@
+{
+  "ids": {
+    "workOrderId": 27956,
+    "orderId": 27956,
+    "userId": "f5a4f5a9-857b-ed11-9f60-00224846c919",
+    "roleId": "048eac5a-732d-4fd7-e810-08df2fe16de2",
+    "inspectionSessionId": "73654038-af75-4963-900c-23e9649c26d5",
+    "invoiceGuid": "941c97c6-9306-4d51-bb91-b50500939a08"
+  },
+  "part": {
+    "make": "ECH",
+    "number": "10010004920",
+    "description": "USE 100100-04921",
+    "price": 69.18
+  },
+  "pricePart": {
+    "make": "ECH",
+    "number": "10010004920"
+  },
+  "warrantor": {
+    "id": "FER",
+    "name": "Ferris Warranty"
+  },
+  "unit": {
+    "inventoryWGId": "5480",
+    "manufacturerId": "FER",
+    "make": "FER",
+    "model": "5901587",
+    "serialNumber": "STOCK-15/05/26/02"
+  },
+  "purchaseOrderId": 3674,
+  "inspection": {
+    "templateId": "c6f93b29-846f-4f0b-9a5a-de01d883c9e1",
+    "moduleId": "2d20ffd6-57c5-4c46-8b17-92f8a53b3bb2",
+    "item1": "20a09201-6923-4c2d-97f4-4e6f8c386078",
+    "item2": "0b820008-a74f-44c8-97db-c2e23039f2b0",
+    "workOrderId": 27956,
+    "jobId": 12481
+  }
+}

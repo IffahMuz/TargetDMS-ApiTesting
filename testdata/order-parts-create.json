@@ -1,10 +1,10 @@
 {
-  "dealerId": 888166,
+  "dealerId": {{DEALER_ID}},
   "orderId": 0,
   "orderGuid": "00000000-0000-0000-0000-000000000000",
   "orderTypeId": 1,
   "orderStatusId": 3,
-  "customerId": 17395,
+  "customerId": {{CUSTOMER_ID}},
   "serviceWriterId": "",
   "salesRepId": null,
   "workOrderId": null,
@@ -15,7 +15,7 @@
   "notes": null,
   "invoices": [
     {
-      "dealerId": 888166,
+      "dealerId": {{DEALER_ID}},
       "invoiceId": 0,
       "invoiceGuid": "00000000-0000-0000-0000-000000000000",
       "orderId": 0,
@@ -28,7 +28,7 @@
       "hasWorkOrder": false,
       "hasSalesDeal": false,
       "hasRental": false,
-      "customerId": 17395,
+      "customerId": {{CUSTOMER_ID}},
       "invoiceTaxes": 0,
       "originalInvoiceId": 0,
       "isActive": true,
@@ -36,7 +36,7 @@
       "invoiceAmount": 4.27,
       "invoiceParts": [
         {
-          "dealerId": 888166,
+          "dealerId": {{DEALER_ID}},
           "invoiceId": 0,
           "orderId": 0,
           "invoicePartId": 0,
@@ -44,8 +44,8 @@
           "invoiceGuid": "00000000-0000-0000-0000-000000000000",
           "jobId": 0,
           "salesPerson": "",
-          "partNumber": "0000 000 0010",
-          "manufacturerId": "STI",
+          "partNumber": "{{data:part.number}}",
+          "manufacturerId": "{{data:part.make}}",
           "description": "FUEL CAN 1 GAL",
           "price": 4.27,
           "retailPrice": 4.27,

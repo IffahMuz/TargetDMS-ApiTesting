@@ -3,6 +3,7 @@ import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';
+import { loadTestText } from '../../src/testdata';
 import { pace } from '../../src/pace';
 
 test.beforeEach(pace);
@@ -26,7 +27,7 @@ test.describe.serial('Flow: customer create -> get -> update -> get -> deactivat
     request.put(`${base}/${config.dealerGuid}`, { headers, data, timeout: config.timeoutMs });
 
   test('1. POST create customer returns 200/201/204 and a customer id', async ({ request }) => {
-    const raw = fs.readFileSync(path.resolve(__dirname, '..', '..', 'testdata', 'customer-create.json'), 'utf8');
+    const raw = loadTestText("customer-create.json");
     const res = await request.post(base, { headers, data: JSON.parse(raw.replace('{{RUN}}', run)), timeout: config.timeoutMs });
     const body = await json(res);
     customerId = Number(body?.data?.customerId ?? 0);

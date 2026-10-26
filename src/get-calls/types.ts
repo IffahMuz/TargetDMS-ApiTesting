@@ -1,22 +1,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
+import { DATA } from '../testdata';
 
-/** Shared test values (testdata/params.json) - the single source of IDs for generic and explicit tests. */
-const values: Record<string, any> = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, '..', '..', 'testdata', 'params.json'), 'utf8'),
-).values;
+/** Shared test values: .env (dealer, customer) and testdata/dealers/<dealerId>.json (ids of existing records). */
+const values = DATA.ids;
 
 export const IDS = {
   dealerGuid: config.dealerGuid,
-  dealerId: values.dealerid as number,
-  customerId: values.customerid as number,
-  workOrderId: values.workorderid as number,
-  orderId: values.orderid as number,
-  userId: values.userid as string,
-  roleId: values.roleid as string,
-  inspectionSessionId: values.inspectionsessionid as string,
-  invoiceGuid: values.invoiceguid as string,
+  dealerId: config.dealerId,
+  customerId: config.customerId,
+  workOrderId: values.workOrderId,
+  orderId: values.orderId,
+  userId: values.userId,
+  roleId: values.roleId,
+  inspectionSessionId: values.inspectionSessionId,
+  invoiceGuid: values.invoiceGuid,
 };
 
 export interface GetCtx {

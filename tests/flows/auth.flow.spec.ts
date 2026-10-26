@@ -42,7 +42,7 @@ test.describe.serial('Flow: login -> use token -> validate -> refresh -> revoke'
     const body = await json(res);
     expect(config.passStatuses, `HTTP ${res.status()}`).toContain(res.status());
     expect(body.data.userName).toBe('Admin');
-    expect(body.data.dealerId).toBe(888166);
+    expect(body.data.dealerId).toBe(config.dealerId);
   });
 
   test('3. A protected endpoint without a token is rejected with 401', async ({ request }) => {

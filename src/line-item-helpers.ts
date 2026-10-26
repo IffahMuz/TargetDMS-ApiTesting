@@ -1,5 +1,6 @@
 import { APIRequestContext } from '@playwright/test';
 import { config } from './config';
+import { DATA } from './testdata';
 import { getOrder, guid, headers, json, partBody, WorkOrder } from './warranty-helpers';
 
 /** Helpers for the order line-item flows (parts, labor, miscellaneous). Labor and miscellaneous lines need REAL codes/items from the dealer. */
@@ -19,22 +20,22 @@ export async function firstMiscItem(request: APIRequestContext): Promise<{ descr
 }
 
 export const laborBody = (wo: WorkOrder, code: { jobCode: string; description: string }, over: Record<string, unknown> = {}) => ({
-  dealerId: 888166, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceLaborId: 0, invoiceLaborGuid: ZERO_GUID,
+  dealerId: config.dealerId, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceLaborId: 0, invoiceLaborGuid: ZERO_GUID,
   invoiceGuid: wo.invoiceGuid, jobId: wo.jobId, technicianId: '', billedHours: 1, actualHours: 0, rate: 50, total: 50, retailTotal: 0,
   laborCode: code.jobCode, description: code.description, moreInfo: null, ...over,
 });
 
 export const miscBody = (wo: WorkOrder, item: { description: string; moreInfo: string }, over: Record<string, unknown> = {}) => ({
-  dealerId: 888166, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceMiscId: 0, invoiceMiscGuid: ZERO_GUID,
+  dealerId: config.dealerId, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceMiscId: 0, invoiceMiscGuid: ZERO_GUID,
   invoiceGuid: wo.invoiceGuid, jobId: wo.jobId, quantitySold: 1, price: 5, retailPrice: 5, description: item.description, moreInfo: item.moreInfo, ...over,
 });
 
-/** The test customer's unit (Wholegood API id 34254, serial Y576576, status On Order). A wholegood line only references it; nothing is checked out. */
-export const WG_UNIT = { inventoryWGId: '34254', manufacturerId: 'AHI', make: 'Animal Health International', model: 'hi', serialNumber: 'Y576576' };
+/** The test customer's unit (see testdata/dealers/<dealerId>.json). A wholegood line only references it; nothing is checked out. */
+export const WG_UNIT = { ...DATA.unit };
 export const WG_PRICE = 100;
 
 export const wgBody = (wo: WorkOrder, over: Record<string, unknown> = {}) => ({
-  dealerId: 888166, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceWGId: 0, invoiceWGGuid: ZERO_GUID,
+  dealerId: config.dealerId, lastUpdated: now(), invoiceId: wo.invoiceId, orderId: wo.orderId, invoiceWGId: 0, invoiceWGGuid: ZERO_GUID,
   invoiceGuid: wo.invoiceGuid, jobId: wo.jobId, dealNumber: 0, ...WG_UNIT, partNumber: WG_UNIT.model, stockNumber: 'AUTO-WG', description: 'AUTOMATION wholegood',
   cost: 50, price: WG_PRICE, suggestedRetailPrice: WG_PRICE, used: false, ...over,
 });

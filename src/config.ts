@@ -13,6 +13,10 @@ export const config = {
   username: process.env.API_USERNAME ?? '',
   password: process.env.API_PASSWORD ?? '',
   dmsDealerId: Number(process.env.API_DMS_DEALER_ID ?? 0),
+  // Dealer under test: location dealerId, its DMS location id (the login id is dmsDealerId above) and a customer to use in created orders.
+  dealerId: Number(process.env.DEALER_ID ?? 0),
+  locationDmsId: Number(process.env.LOCATION_DMS_ID ?? 0),
+  customerId: Number(process.env.TEST_CUSTOMER_ID ?? 0),
   staticToken: process.env.API_TOKEN ?? '',
   // Safe by default: generic tests only run GET unless ALLOW_WRITES=true (or METHODS is set explicitly).
   methods: list(process.env.METHODS).length

@@ -3,6 +3,7 @@ import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';
+import { loadTestBody } from '../../src/testdata';
 import { pace } from '../../src/pace';
 
 test.beforeEach(pace);
@@ -17,7 +18,7 @@ test.describe.serial('Flow: inspection session create -> get -> delete', () => {
   let deleted = false;
 
   test('1. POST create inspection session returns 200/201/204 and a session id', async ({ request }) => {
-    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'testdata', 'inspection-session.json'), 'utf8'));
+    const data = loadTestBody("inspection-session.json");
     const res = await request.post(url, { headers, data, timeout: config.timeoutMs });
     const body = await json(res);
     sessionId = body?.data?.inspectionSessionId ?? '';

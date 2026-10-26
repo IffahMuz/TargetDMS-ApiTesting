@@ -23,7 +23,7 @@ test.describe.serial('Flow: receipt link -> receipt', () => {
     const res = await request.post(`${base}/GetReceiptLink`, {
       headers,
       data: {
-        dmsDealerId: 199301001,
+        dmsDealerId: config.locationDmsId,
         dealerId: IDS.dealerId,
         orderId: IDS.orderId,
         customerId: order.data.customerId,

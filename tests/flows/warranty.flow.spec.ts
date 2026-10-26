@@ -3,6 +3,7 @@ import { test } from '../../src/fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, tokenPath } from '../../src/config';
+import { DATA, loadTestBody } from '../../src/testdata';
 import { IDS } from '../../src/get-calls/types';
 import { pace } from '../../src/pace';
 
@@ -19,7 +20,7 @@ const ok = (res: APIResponse) => config.passStatuses.includes(res.status());
 // Hidden rules found by probing (not in Swagger or the validator): claimType must be exactly 1 character (W works) and
 // warrantorId at most 10 characters. subtotal / tax / total are calculated by the server and ignored when sent.
 const claimBody = (over: Record<string, unknown> = {}) => ({
-  warrantyClaimId: null, warrantorId: 'GRAVELY', warrantorName: 'ARIENS COMPANY', subtotal: 0, tax: 0, total: 0,
+  warrantyClaimId: null, warrantorId: DATA.warrantor.id, warrantorName: DATA.warrantor.name, subtotal: 0, tax: 0, total: 0,
   claimType: 'W', claimNumber: 'AUTO-A', salesTaxCode: null,
   failedDate: '2026-10-01T00:00:00', repairStartDate: '2026-10-02T00:00:00', repairCompleteDate: '2026-10-03T00:00:00',
   modelNumber: 'MODEL-X', mfrId: 'STI', serialNumber: 'SN-AUTO-1', origSoldBy: 'Test Dealer', equipmentType: 'Mower',
@@ -27,8 +28,7 @@ const claimBody = (over: Record<string, unknown> = {}) => ({
 });
 
 function orderBody(marker: string) {
-  const raw = fs.readFileSync(path.resolve(__dirname, '..', '..', 'testdata', 'order-create.json'), 'utf8');
-  const body = JSON.parse(raw.split('{{NOW}}').join(new Date().toISOString().slice(0, 19)));
+  const body = loadTestBody("order-create.json");
   body.notes = marker;
   body.poNumber = 'AUTO-WTY';
   return body;
@@ -73,7 +73,7 @@ test.describe.serial('Warranty claim: create, view, update, add a second claim, 
     test.skip(!claimA, 'no claim');
     const body = await json(await claims(request));
     expect(body.data).toHaveLength(1);
-    expect(body.data[0]).toMatchObject({ warrantyClaimId: claimA, warrantorId: 'GRAVELY', warrantorName: 'ARIENS COMPANY', claimNumber: 'AUTO-A' });
+    expect(body.data[0]).toMatchObject({ warrantyClaimId: claimA, warrantorId: DATA.warrantor.id, warrantorName: DATA.warrantor.name, claimNumber: 'AUTO-A' });
   });
 
   test('5. Amounts typed into a claim are ignored, because the system works out the totals itself', async ({ request }) => {

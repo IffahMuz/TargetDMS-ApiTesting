@@ -1,7 +1,7 @@
 {
-  "DmsDealerId": 199301001,
-  "DealerId": 888166,
-  "DealerGuid": "c4cf2b83-1e4a-4f89-b3da-82df1ad411cd",
+  "DmsDealerId": {{LOCATION_DMS_ID}},
+  "DealerId": {{DEALER_ID}},
+  "DealerGuid": "{{DEALER_GUID}}",
   "Address1": "",
   "Address2": "",
   "City": "",

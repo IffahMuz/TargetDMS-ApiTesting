@@ -1,10 +1,11 @@
 import { expect } from '@playwright/test';
+import { config } from '../config';
 import { IDS, PostCall } from './types';
 
 // Every Notification "send" endpoint emails or texts a real person on success, so ONLY failing bodies are tested here:
 // each one breaks exactly ONE rule and must be rejected with 400 before anything is sent. (GetReceiptLink is covered in tests/flows/receipt.flow.spec.ts.)
-// dmsDealerId must be the DMS dealer our user owns (199301001), otherwise the dealer filter answers 403 before validation runs.
-const dms = 199301001;
+// dmsDealerId must be the DMS dealer our user owns (config.locationDmsId), otherwise the dealer filter answers 403 before validation runs.
+const dms = config.locationDmsId;
 const email = 'iffahmuzaffar110@gmail.com'; // the tester's own address; never reached because every body below is rejected
 const phone = '0000000000'; // not a real number
 const trusted = 'https://targetumh.example.com/file.png';
