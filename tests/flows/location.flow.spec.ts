@@ -197,6 +197,41 @@ test.describe.serial('Flow: two locations keep their orders and lists apart', ()
     }
   });
 
+  test('15b. Each location has its own inventory: the lists differ and every item is stocked at the location asked', async ({ request }) => {
+    needB();
+    const ask = async (l: Location, search = '') => {
+      const res = await request.post('/api/v1/Inventory/GetInventory', {
+        headers,
+        data: { dealerId: String(l.dealerId), itemType: '', search, mfrCode: '', availability: '', categoryId: '', condition: 'New', modelCode: '', tag: '', pageNumber: 0, pageSize: 20 },
+        timeout: config.timeoutMs,
+      });
+      const body = await json(res);
+      expect(config.passStatuses, `${l.name}: HTTP ${res.status()} ${JSON.stringify(body).slice(0, 200)}`).toContain(res.status());
+      return { total: body.data.totalCount as number, items: (body.data.inventory ?? []) as any[] };
+    };
+    const lists = new Map<number, { total: number; items: any[] }>();
+    for (const l of [A, B!]) {
+      const got = await ask(l);
+      lists.set(l.dealerId, got);
+      for (const item of got.items) {
+        expect(item.otherLocation.map((o: any) => o.dealerId), `${item.inventoryPartId} in the list of ${l.name}`).toContain(l.dealerId);
+      }
+    }
+    const a = lists.get(A.dealerId)!;
+    const b = lists.get(B!.dealerId)!;
+    test.skip(a.total === 0 && b.total === 0, 'neither location has inventory');
+    const ids = (x: { items: any[] }) => x.items.map((i) => i.inventoryPartId).join(',');
+    expect(a.total !== b.total || ids(a) !== ids(b), `${A.name} and ${B!.name} return the same inventory (${a.total} items)`).toBe(true);
+    // a part from one list, searched in the other location: every hit must be stocked there
+    for (const [from, into] of [[b, A], [a, B!]] as const) {
+      const part = from.items[0];
+      if (!part) continue;
+      for (const item of (await ask(into, part.partNumber)).items) {
+        expect(item.otherLocation.map((o: any) => o.dealerId), `${item.inventoryPartId} searched at ${into.name}`).toContain(into.dealerId);
+      }
+    }
+  });
+
   test('16. Inventory counts for a location carry only that location\'s DMS location id', async ({ request }) => {
     needB();
     for (const l of [A, B!]) {

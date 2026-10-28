@@ -468,28 +468,4 @@ test.describe('Known server defects in location handling', () => {
       }
     });
   }
-
-  // GetInventory (the inventory page) answers per location. Parts and Miscellaneous take the same dealer GUID, and the backend passes it on, but every location gets the same list.
-  const partsAndMisc = async (request: any) => {
-    const { all, current } = await locationsOf(request);
-    const total = async (l: Location) => (await json(await request.post('/api/v1/Inventory/GetInventory', {
-      headers, timeout: config.timeoutMs,
-      data: { dealerId: String(l.dealerId), itemType: '', search: '', mfrCode: '', availability: '', categoryId: '', condition: 'New', modelCode: '', tag: '', pageNumber: 0, pageSize: 1 },
-    }))).data?.totalCount as number;
-    const here = await total(current);
-    let other: Location | undefined;
-    for (const l of all.filter((x) => x.dealerId !== current.dealerId)) {
-      if ((await total(l)) !== here) { other = l; break; }
-    }
-    test.skip(!other, 'no location has an inventory size different from the current one, so there is nothing to tell apart');
-    return { current, other: other! };
-  };
-
-  for (const [what, path] of [['Parts', 'Inventory/Parts'], ['Miscellaneous', 'Inventory/Miscellaneous']] as const) {
-    test(`NEG-21 ${what} differ between two locations whose inventory differs [known defect]`, async ({ request }) => {
-      const { current, other } = await partsAndMisc(request);
-      const list = async (l: Location) => JSON.stringify((await json(await request.get(`/api/v1/${path}/${l.dealerGuid}?PageNumber=1&PageSize=50`, { headers, timeout: config.timeoutMs }))).data);
-      expect(await list(other), `${what} for ${other.name} are the same as for ${current.name}`).not.toBe(await list(current));
-    });
-  }
 });

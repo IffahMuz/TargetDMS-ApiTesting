@@ -91,6 +91,25 @@ test.describe('Location negative cases: bad input is refused', () => {
     });
   }
 
+  // ---- the Inventory tab ----
+  test('NEG-21 The inventory list of a location only holds parts stocked at that location', async ({ request }) => {
+    const { locations } = await loadLocations(request);
+    const list = async (l: Location, search = '') => (await json(await request.post('/api/v1/Inventory/GetInventory', {
+      headers, timeout: config.timeoutMs,
+      data: { dealerId: String(l.dealerId), itemType: '', search, mfrCode: '', availability: '', categoryId: '', condition: 'New', modelCode: '', tag: '', pageNumber: 0, pageSize: 20 },
+    }))).data;
+    const other = locations.find((l) => l.dealerId !== here.dealerId);
+    test.skip(!other, 'this company has only one location');
+    const first = (await list(other!)).inventory?.[0];
+    test.skip(!first, `${other!.name} has no inventory`);
+    // searched at either location, every hit must name the location that was asked as one of its stocking locations
+    for (const l of [other!, here]) {
+      for (const item of (await list(l, first.partNumber)).inventory ?? []) {
+        expect(item.otherLocation.map((o: any) => o.dealerId), `${item.inventoryPartId} asked at ${l.name}`).toContain(l.dealerId);
+      }
+    }
+  });
+
   test('NEG-16 Wholegoods filtered by a DMS location no location has is an empty list', async ({ request }) => {
     const res = await request.get(withGuid('/api/v1/Inventory/Wholegoods/{guid}?DmsLocationId=999999&PageNumber=1&PageSize=5'), { headers, timeout: config.timeoutMs });
     expect(res.status(), await text(res)).toBe(200);
