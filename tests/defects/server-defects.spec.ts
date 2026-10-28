@@ -452,7 +452,7 @@ test.describe('Known server defects in location handling', () => {
 
   // The URL names the location. A body that names another one (or one that does not exist) is a client mistake and must be refused, not quietly saved under the URL's location.
   for (const kind of ['a dealer id that does not exist', 'another location\'s dealer id']) {
-    test(`NEG-19 An order posted to the current location with ${kind} in the body is refused with a 4xx [known defect]`, async ({ request }) => {
+    test(`NEG-19 An order posted to the current location with ${kind} in the body is a 403 [known defect]`, async ({ request }) => {
       const { all, current } = await locationsOf(request);
       const other = otherLocation(all, current);
       test.skip(kind.startsWith('another') && !other, 'this company has only one location');
@@ -462,7 +462,7 @@ test.describe('Known server defects in location handling', () => {
       for (const invoice of body.invoices ?? []) invoice.dealerId = dealerId;
       const saved = await saveOrderAt(request, current, body);
       try {
-        expect(isClientError(saved.status), `HTTP ${saved.status}: order ${saved.orderId} was saved under dealer ${saved.dealerId} although the body says ${dealerId}`).toBe(true);
+        expect(saved.status, `must be 403 (the dealer id in the token does not match the one in the request): order ${saved.orderId} was saved under dealer ${saved.dealerId} although the body says ${dealerId}, HTTP ${saved.status}`).toBe(403);
       } finally {
         if (saved.orderId) await closeOrderAt(request, current, saved.orderId);
       }
