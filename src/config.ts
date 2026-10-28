@@ -1,4 +1,5 @@
 import * as dotenv from 'dotenv';
+import * as os from 'os';
 import * as path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
@@ -31,6 +32,8 @@ export const config = {
   passStatuses: [200, 201, 204],
 };
 
-export const cacheDir = path.resolve(__dirname, '..', '.cache');
+// Generated files (token cache, Playwright output) live outside the project so a synced folder such as OneDrive does not see them being rewritten. Override with WORK_DIR.
+export const workDir = process.env.WORK_DIR ? path.resolve(process.env.WORK_DIR) : path.join(os.tmpdir(), 'targetdms-api-tests');
+export const cacheDir = path.join(workDir, '.cache');
 export const specPath = path.join(cacheDir, 'spec.json');
 export const tokenPath = path.join(cacheDir, 'token.json');

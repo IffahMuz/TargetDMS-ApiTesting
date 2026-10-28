@@ -5,6 +5,8 @@ import { config, tokenPath } from '../../src/config';
 import { DATA, loadTestBody } from '../../src/testdata';
 import { IDS } from '../../src/get-calls/types';
 import { pace } from '../../src/pace';
+import * as crypto from 'crypto';
+import { Location, closeOrderAt, currentLocation, listOrdersAt, loadLocations, orderBodyFor, otherLocation, readOrderAt, saveOrderAt } from '../../src/location-helpers';
 
 test.beforeEach(pace);
 
@@ -366,4 +368,128 @@ test.describe('Known server defects (5xx instead of 4xx)', () => {
     expect(config.passStatuses, `HTTP ${res.status()}`).toContain(res.status());
     expect((await json(res)).data.inventory).toEqual([]);
   });
+});
+
+// Two locations of one company (found from Dealer/Locations; see tests/flows/location.flow.spec.ts).
+test.describe('Known server defects across locations', () => {
+  const twoLocations = async (request: any) => {
+    const { locations } = await loadLocations(request);
+    const current = currentLocation(locations);
+    const other = current && otherLocation(locations, current);
+    test.skip(!current || !other, 'this company has only one location');
+    return { current: current!, other: other! };
+  };
+
+  // The customer list is company-wide (same total and ids in every location), but reading one customer through another location's GUID gets an empty upstream answer.
+  test('A customer of the company can be read through any location, not a 500 JSON parser error [known defect]', async ({ request }) => {
+    const { other } = await twoLocations(request);
+    const res = await request.get(`/api/v1/Customer?DealerGuid=${other.dealerGuid}&CustomerId=${config.customerId}`, { headers, timeout: config.timeoutMs });
+    expect(res.status(), `HTTP ${res.status()} at ${other.name}: ${JSON.stringify(await json(res)).slice(0, 200)}`).toBe(200);
+  });
+
+  // The order is correctly not found, but the 404 from the order service comes back wrapped as a 502.
+  test('Reading an order that belongs to another location is a 404, not a 502 [known defect]', async ({ request }) => {
+    const { current, other } = await twoLocations(request);
+    const theirs = (await listOrdersAt(request, other, { PageSize: 1 })).orders[0];
+    test.skip(!theirs, `${other.name} has no orders to read`);
+    const res = await readOrderAt(request, current, theirs.orderId);
+    expect(isClientError(res.status), `HTTP ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}`).toBe(true);
+  });
+});
+
+// Location handling. The cases are written against the correct behaviour; the locations come from Dealer/Locations at run time, nothing is hard-coded.
+test.describe('Known server defects in location handling', () => {
+  const unknownGuid = () => crypto.randomUUID();
+  const text = async (res: any) => JSON.stringify(await json(res)).slice(0, 220);
+
+  const locationsOf = async (request: any) => {
+    const { locations } = await loadLocations(request);
+    const current = currentLocation(locations);
+    test.skip(!current, 'the current location is not in the location list');
+    return { all: locations, current: current! };
+  };
+
+  test('NEG-05 Dealer/Locations for a GUID that does not exist is a 404 without internal error text [known defect]', async ({ request }) => {
+    const res = await request.get(`/api/v1/Dealer/Locations/${unknownGuid()}`, { headers, timeout: config.timeoutMs });
+    const body = await text(res);
+    expect(res.status(), body).toBe(404);
+    expect(body, 'the message shows internal text').not.toMatch(/Response status code does not indicate success/i);
+  });
+
+  // The same condition (no such dealer) is a clean 404 for Locations, Wholegoods and SalesReps but a 502 "Dealer not found" for these.
+  const unknownDealerCalls: [string, (request: any, guid: string, here: Location) => Promise<any>][] = [
+    ['Order/All', (r, g) => r.get(`/api/v1/Order/All/${g}?WithCount=true&PageNumber=1&PageSize=1`, { headers, timeout: config.timeoutMs })],
+    ['reading an order', (r, g) => r.get(`/api/v1/Order/${g}?OrderId=1`, { headers, timeout: config.timeoutMs })],
+    ['closing an order', (r, g) => r.delete(`/api/v1/Order/${g}?OrderId=1`, { headers, timeout: config.timeoutMs })],
+    ['creating an order', (r, g, here) => r.post(`/api/v1/Order/${g}`, { headers, data: orderBodyFor('order-parts-create.json', here, 'AUTOMATION-NEG'), timeout: config.timeoutMs })],
+    ['Inventory/Count', (r, g) => r.get(`/api/v1/Inventory/Count/${g}?LocationId=1&PageNumber=1&PageSize=1`, { headers, timeout: config.timeoutMs })],
+    ['Dealer/Configuration', (r, g) => r.get(`/api/v1/Dealer/Configuration/${g}?Source=TargetDMS&EntityName=Setup`, { headers, timeout: config.timeoutMs })],
+    ['Customer/All', (r, g) => r.get(`/api/v1/Customer/All?DealerGuid=${g}&PageNumber=1&PageSize=1`, { headers, timeout: config.timeoutMs })],
+  ];
+  for (const [what, call] of unknownDealerCalls) {
+    test(`NEG-07 ${what} for a GUID that does not exist is a 404, not a 502 [known defect]`, async ({ request }) => {
+      const { current } = await locationsOf(request);
+      const res = await call(request, unknownGuid(), current);
+      expect(res.status(), await text(res)).toBe(404);
+    });
+  }
+
+  test('NEG-10 Reading an order that does not exist is a 404, not a 502 [known defect]', async ({ request }) => {
+    const { current } = await locationsOf(request);
+    const res = await request.get(`/api/v1/Order/${current.dealerGuid}?OrderId=999999999`, { headers, timeout: config.timeoutMs });
+    expect(res.status(), await text(res)).toBe(404);
+  });
+
+  for (const [what, path] of [['Inventory counts', 'Inventory/Count'], ['Purchase orders', 'PurchaseOrder']] as const) {
+    test(`NEG-13 ${what} for a location id no location has is a 400 or an empty list, not a 502 [known defect]`, async ({ request }) => {
+      const { current } = await locationsOf(request);
+      const res = await request.get(`/api/v1/${path}/${current.dealerGuid}?LocationId=999999&PageNumber=1&PageSize=5`, { headers, timeout: config.timeoutMs });
+      const body = await json(res);
+      const refusedOrEmpty = res.status() === 400 || (res.status() === 200 && (body.data?.items ?? []).length === 0);
+      expect(refusedOrEmpty, `HTTP ${res.status()}: ${JSON.stringify(body).slice(0, 220)}`).toBe(true);
+    });
+  }
+
+  // The URL names the location. A body that names another one (or one that does not exist) is a client mistake and must be refused, not quietly saved under the URL's location.
+  for (const kind of ['a dealer id that does not exist', 'another location\'s dealer id']) {
+    test(`NEG-19 An order posted to the current location with ${kind} in the body is refused with a 4xx [known defect]`, async ({ request }) => {
+      const { all, current } = await locationsOf(request);
+      const other = otherLocation(all, current);
+      test.skip(kind.startsWith('another') && !other, 'this company has only one location');
+      const dealerId = kind.startsWith('another') ? other!.dealerId : Math.max(...all.map((l) => l.dealerId)) + 1;
+      const body = orderBodyFor('order-parts-create.json', current, `AUTOMATION-NEG-${Date.now()}`);
+      body.dealerId = dealerId;
+      for (const invoice of body.invoices ?? []) invoice.dealerId = dealerId;
+      const saved = await saveOrderAt(request, current, body);
+      try {
+        expect(isClientError(saved.status), `HTTP ${saved.status}: order ${saved.orderId} was saved under dealer ${saved.dealerId} although the body says ${dealerId}`).toBe(true);
+      } finally {
+        if (saved.orderId) await closeOrderAt(request, current, saved.orderId);
+      }
+    });
+  }
+
+  // GetInventory (the inventory page) answers per location. Parts and Miscellaneous take the same dealer GUID, and the backend passes it on, but every location gets the same list.
+  const partsAndMisc = async (request: any) => {
+    const { all, current } = await locationsOf(request);
+    const total = async (l: Location) => (await json(await request.post('/api/v1/Inventory/GetInventory', {
+      headers, timeout: config.timeoutMs,
+      data: { dealerId: String(l.dealerId), itemType: '', search: '', mfrCode: '', availability: '', categoryId: '', condition: 'New', modelCode: '', tag: '', pageNumber: 0, pageSize: 1 },
+    }))).data?.totalCount as number;
+    const here = await total(current);
+    let other: Location | undefined;
+    for (const l of all.filter((x) => x.dealerId !== current.dealerId)) {
+      if ((await total(l)) !== here) { other = l; break; }
+    }
+    test.skip(!other, 'no location has an inventory size different from the current one, so there is nothing to tell apart');
+    return { current, other: other! };
+  };
+
+  for (const [what, path] of [['Parts', 'Inventory/Parts'], ['Miscellaneous', 'Inventory/Miscellaneous']] as const) {
+    test(`NEG-21 ${what} differ between two locations whose inventory differs [known defect]`, async ({ request }) => {
+      const { current, other } = await partsAndMisc(request);
+      const list = async (l: Location) => JSON.stringify((await json(await request.get(`/api/v1/${path}/${l.dealerGuid}?PageNumber=1&PageSize=50`, { headers, timeout: config.timeoutMs }))).data);
+      expect(await list(other), `${what} for ${other.name} are the same as for ${current.name}`).not.toBe(await list(current));
+    });
+  }
 });

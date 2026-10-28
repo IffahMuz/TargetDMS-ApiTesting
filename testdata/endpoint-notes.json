@@ -1,0 +1,9 @@
+{
+  "POST /api/v1/Auth/Login": "Only called once by the global setup, which logs in at the start of the run. The tests that log in again are skipped because SINGLE_LOGIN=true (repeated logins locked the test account).",
+  "POST /api/v1/Auth/ValidateToken": "The auth flow test for this call is skipped (it needs the login test, which SINGLE_LOGIN=true skips). The GET version of this endpoint is tested.",
+  "POST /api/v1/ChangeRelay/TestEvent": "No test has been written for this endpoint.",
+  "POST /api/v1/Dealer/Configuration/{dealerGuid}": "No test has been written for the POST. Only the GET on the same path is tested.",
+  "POST /api/v1/Inspection/Templates/{dealerGuid}": "No test has been written for the POST. Only the GET on the same path is tested.",
+  "POST /api/v1/Payment/Deposit/{dealerGuid}": "No test has been written for this endpoint.",
+  "POST /api/v1/User/RegisterEmail": "Deliberately not tested: a valid call would register an email address and send mail (see src/post-calls/user.ts)."
+}

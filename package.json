@@ -6,7 +6,9 @@
   "scripts": {
     "test": "playwright test",
     "test:get": "cross-env METHODS=GET playwright test",
-    "report": "playwright show-report reports/playwright-html"
+    "report:detail": "node scripts/build-detail-report.js",
+    "dashboard": "node scripts/dashboard.js",
+    "report": "node -e \"require('dotenv').config();const p=require('path');require('child_process').spawnSync('npx',['playwright','show-report','\\\"'+p.join(process.env.WORK_DIR||p.join(require('os').tmpdir(),'targetdms-api-tests'),'playwright-html')+'\\\"'],{stdio:'inherit',shell:true})\""
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

@@ -1,5 +1,6 @@
 import { defineConfig } from '@playwright/test';
-import { config } from './src/config';
+import * as path from 'path';
+import { config, workDir } from './src/config';
 
 export default defineConfig({
   testDir: './tests',
@@ -7,11 +8,14 @@ export default defineConfig({
   // Generous on purpose: src/fixtures.ts may wait for the API rate-limit window. Each request still has its own timeout (REQUEST_TIMEOUT_MS).
   timeout: 330_000,
   retries: 0,
+  outputDir: path.join(workDir, 'test-results'),
   workers: 1, // single worker + pacing keeps the run under the API rate limit (100 req / 3 min)
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'reports/playwright-html', open: 'never' }],
+    ['html', { outputFolder: path.join(workDir, 'playwright-html'), open: 'never' }],
     ['./src/summary-reporter.ts'],
+    ['./src/detail-reporter.ts'],
+    ['./src/live-reporter.ts'],
   ],
   use: {
     baseURL: config.baseUrl,

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TargetDMS API Detailed Report</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mute:#5b6675; --line:#e2e6ec; --ok:#1a7f4b; --bad:#b42318; --warn:#a15c00; --info:#1d4ed8; --def:#7a3db8;
+          --okbg:#e6f4ec; --badbg:#fdeceb; --warnbg:#fff4e0; --infobg:#e8effd; --defbg:#f1e8fb; --code:#f0f2f5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1a2028; --ink:#e8ecf2; --mute:#9aa6b6; --line:#2b3440; --ok:#5fcf93; --bad:#ff8a80; --warn:#f5b85a; --info:#8ab4ff; --def:#c9a2f5;
+          --okbg:#16301f; --badbg:#3a1c1a; --warnbg:#392a10; --infobg:#17233f; --defbg:#2b1d3f; --code:#0f1318; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,"Segoe UI",sans-serif; }
+  .wrap { max-width:1280px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 2px; } .sub { color:var(--mute); margin:0 0 16px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+  .card b { display:block; font-size:24px; line-height:1.1; } .card span { color:var(--mute); font-size:12px; }
+  .c-ok b { color:var(--ok); } .c-bad b { color:var(--bad); } .c-warn b { color:var(--warn); } .c-def b { color:var(--def); } .c-info b { color:var(--info); }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; }
+  .tab { border:1px solid var(--line); background:var(--card); color:var(--ink); padding:7px 14px; border-radius:8px; cursor:pointer; font:inherit; }
+  .tab.on { background:var(--info); color:#fff; border-color:var(--info); }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .bar input, .bar select { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; }
+  .bar input { flex:1; min-width:220px; }
+  .count { color:var(--mute); align-self:center; }
+  .tag-head { margin:18px 0 6px; font-weight:600; font-size:15px; }
+  .row { background:var(--card); border:1px solid var(--line); border-radius:8px; margin-bottom:6px; overflow:hidden; }
+  .row > summary { list-style:none; cursor:pointer; display:grid; grid-template-columns:70px minmax(0,1fr) 150px 150px; gap:10px; align-items:center; padding:8px 12px; }
+  .row > summary::-webkit-details-marker { display:none; }
+  .row > summary { position:relative; padding-left:28px; }
+  .row > summary:hover, .ex > summary:hover { background:var(--infobg); }
+  .row > summary::before, .ex > summary::before { content:"\25B6"; color:var(--info); position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:11px; transition:transform .12s; }
+  .ex > summary { position:relative; padding-left:28px; }
+  .row[open] > summary::before, .ex[open] > summary::before { transform:translateY(-50%) rotate(90deg); }
+  .hint { color:var(--mute); margin:0 0 10px; }
+  .btn { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:7px 12px; cursor:pointer; font:inherit; }
+  .row[open] > summary { border-bottom:1px solid var(--line); background:var(--bg); }
+  .trow > summary { grid-template-columns:90px minmax(0,1fr) 220px 70px; }
+  .path { font-family:ui-monospace,Consolas,monospace; font-size:13px; word-break:break-all; } .path small { display:block; color:var(--mute); font-family:inherit; }
+  .m { display:inline-block; min-width:54px; text-align:center; font-weight:700; font-size:11px; padding:2px 6px; border-radius:5px; color:#fff; }
+  .GET { background:#1d7a46; } .POST { background:#1d4ed8; } .PUT { background:#a15c00; } .DELETE { background:#b42318; } .PATCH { background:#6b46c1; }
+  .pill { display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+  .p-passed { background:var(--okbg); color:var(--ok); } .p-failed { background:var(--badbg); color:var(--bad); }
+  .p-defect { background:var(--defbg); color:var(--def); } .p-skipped { background:var(--warnbg); color:var(--warn); }
+  .p-auto { background:var(--okbg); color:var(--ok); } .p-no { background:var(--badbg); color:var(--bad); }
+  .nums { color:var(--mute); font-size:12px; } .nums b { font-weight:700; }
+  .n-pass { color:var(--ok); } .n-def { color:var(--def); } .n-fail { color:var(--bad); } .n-skip { color:var(--warn); }
+  .body { padding:10px 12px 12px; }
+  .note { background:var(--warnbg); border-left:4px solid var(--warn); padding:8px 12px; border-radius:6px; margin:4px 0; }
+  .err { background:var(--badbg); border-left:4px solid var(--bad); padding:8px 12px; border-radius:6px; margin:6px 0; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .ex { border:1px solid var(--line); border-radius:8px; margin:8px 0; }
+  .ex > summary { cursor:pointer; padding:7px 10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .ex[open] > summary { border-bottom:1px solid var(--line); }
+  .st { font-weight:700; } .st.ok { color:var(--ok); } .st.no { color:var(--bad); }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px; }
+  .cols h4 { margin:0 0 4px; font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; }
+  pre { margin:0; background:var(--code); border:1px solid var(--line); border-radius:6px; padding:8px; overflow:auto; max-height:360px; font:12px/1.4 ui-monospace,Consolas,monospace; white-space:pre-wrap; word-break:break-word; }
+  .linked { margin:6px 0 0; padding-left:0; list-style:none; }
+  .empty { color:var(--mute); padding:20px; text-align:center; }
+  .gname { color:var(--mute); font-size:12px; }
+  @media (max-width:760px) { .row > summary, .trow > summary { grid-template-columns:1fr; } .cols { grid-template-columns:1fr; } }
+  [hidden] { display:none !important; }
+  .bar[data-js] { display:none; } .js .bar[data-js] { display:flex; }
+  a.tab { text-decoration:none; display:inline-block; }
+  a.goto { color:var(--info); font-size:12px; }
+  details.row[id] { scroll-margin-top:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TargetDMS API Detailed Report</h1>
+  <p class="sub"><!--SUB--></p>
+  <div class="cards"><!--CARDS--></div>
+  <p class="hint">Click any row to open it: an endpoint shows its tests, a test shows its error and every request with the payload sent and the response received. Everything is plain HTML, so rows open even where scripts are blocked (only search and filters need a browser such as Chrome or Edge).</p>
+  <div class="tabs"><a class="tab on" href="#ep" data-tab="ep">Endpoints</a><a class="tab" href="#tc" data-tab="tc">Test cases</a></div>
+
+  <section id="ep">
+    <div class="bar" data-js>
+      <input id="epq" type="search" placeholder="Search endpoint, tag or description">
+      <select id="epf"><option value="">All endpoints</option><option value="auto">Automated</option><option value="no">Not automated</option><option value="fail">Has failing tests</option><option value="skip">Has skipped tests</option></select>
+      <select id="ept"><option value="">All tags</option><!--TAGS--></select>
+      <button class="btn" id="epx">Open failing</button><button class="btn" id="epz">Close all</button>
+      <span class="count" id="epc"></span>
+    </div>
+    <!--EP-->
+  </section>
+
+  <section id="tc">
+    <div class="bar" data-js>
+      <input id="tcq" type="search" placeholder="Search test name, group, file or error">
+      <select id="tcf"><option value="">All results</option><option value="passed">Passed</option><option value="failed">Failed (unexpected)</option><option value="defect">Failed (known server defect)</option><option value="skipped">Skipped</option></select>
+      <select id="tcg"><option value="">All files</option><!--FILES--></select>
+      <button class="btn" id="tcx">Open failing</button><button class="btn" id="tcz">Close all</button>
+      <span class="count" id="tcc"></span>
+    </div>
+    <!--TC-->
+  </section>
+</div>
+
+<script>
+// Optional extras. The report works without this script; it adds the tabs, search and filters.
+document.documentElement.classList.add('js');
+const $ = (id) => document.getElementById(id);
+const showTab = (name) => {
+  document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x.dataset.tab === name));
+  $('ep').hidden = name !== 'ep'; $('tc').hidden = name !== 'tc';
+};
+document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); showTab(b.dataset.tab); }));
+showTab('ep');
+document.querySelectorAll('a.goto').forEach((a) => a.addEventListener('click', (e) => {
+  e.preventDefault(); showTab('tc');
+  const t = document.getElementById(a.getAttribute('href').slice(1));
+  if (t) { t.open = true; t.scrollIntoView({ block: 'start' }); }
+}));
+
+function filter(listId, countId, test) {
+  const rows = document.querySelectorAll('#' + listId + ' > details.row');
+  let n = 0;
+  rows.forEach((r) => { const show = test(r.dataset); r.hidden = !show; if (show) n++; });
+  document.querySelectorAll('#' + listId + ' > .tag-head').forEach((h) => {
+    let next = h.nextElementSibling, any = false;
+    while (next && !next.classList.contains('tag-head')) { if (!next.hidden) any = true; next = next.nextElementSibling; }
+    h.hidden = !any;
+  });
+  $(countId).textContent = n + ' of ' + rows.length;
+}
+const epFilter = () => filter('eplist', 'epc', (d) => (!$('ept').value || d.tag === $('ept').value) &&
+  (!$('epf').value || ($('epf').value === 'auto' && d.auto === '1') || ($('epf').value === 'no' && d.auto === '0') || ($('epf').value === 'fail' && d.fail === '1') || ($('epf').value === 'skip' && d.skip === '1')) &&
+  (!$('epq').value || d.text.includes($('epq').value.toLowerCase())));
+const tcFilter = () => filter('tclist', 'tcc', (d) => (!$('tcf').value || d.outcome === $('tcf').value) && (!$('tcg').value || d.file === $('tcg').value) &&
+  (!$('tcq').value || d.text.includes($('tcq').value.toLowerCase())));
+['epq', 'epf', 'ept'].forEach((id) => $(id).addEventListener('input', epFilter));
+['tcq', 'tcf', 'tcg'].forEach((id) => $(id).addEventListener('input', tcFilter));
+const setOpen = (sel, open) => document.querySelectorAll(sel).forEach((d) => { if (!d.hidden) d.open = open; });
+$('epx').addEventListener('click', () => setOpen('#eplist > details.row[data-fail="1"]', true));
+$('tcx').addEventListener('click', () => setOpen('#tclist > details.row[data-outcome="failed"], #tclist > details.row[data-outcome="defect"]', true));
+$('epz').addEventListener('click', () => setOpen('#eplist details[open]', false));
+$('tcz').addEventListener('click', () => setOpen('#tclist details[open]', false));
+epFilter(); tcFilter();
+</script>
+</body>
+</html>
