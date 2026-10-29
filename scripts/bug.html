@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create a defect on ADO</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mute:#5b6675; --line:#e2e6ec; --ok:#1a7f4b; --bad:#b42318; --warn:#a15c00; --info:#1d4ed8; --def:#7a3db8;
+          --btn:#1d4ed8; --btnh:#1e40af; --btnb:#1d4ed8; --okbg:#e6f4ec; --badbg:#fdeceb; --warnbg:#fff4e0; --infobg:#e8effd; --defbg:#f1e8fb; --code:#f0f2f5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1a2028; --ink:#e8ecf2; --mute:#9aa6b6; --line:#2b3440; --ok:#5fcf93; --bad:#ff8a80; --warn:#f5b85a; --info:#8ab4ff; --def:#c9a2f5;
+          --okbg:#16301f; --badbg:#3a1c1a; --warnbg:#392a10; --infobg:#17233f; --defbg:#2b1d3f; --code:#0f1318; --btn:#17233f; --btnh:#223564; --btnb:#3a5aa6; } }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 system-ui,"Segoe UI",sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 2px; } h3 { margin:18px 0 6px; font-size:15px; } h4 { margin:12px 0 4px; font-size:13px; }
+  .sub { color:var(--mute); margin:0 0 14px; } a { color:var(--info); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  label.f { display:block; font-weight:600; font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+  input.title { width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 11px; font:inherit; font-weight:600; font-size:15px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px 16px; margin-top:12px; }
+  .grid div b { display:block; font-size:12px; color:var(--mute); font-weight:600; text-transform:uppercase; letter-spacing:.04em; } .grid div span { word-break:break-word; }
+  .chip { display:inline-block; background:var(--infobg); color:var(--info); border-radius:999px; padding:1px 10px; font-size:12px; margin:2px 4px 2px 0; }
+  .banner { border-left:4px solid; border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+  .b-warn { background:var(--warnbg); border-color:var(--warn); } .b-bad { background:var(--badbg); border-color:var(--bad); } .b-ok { background:var(--okbg); border-color:var(--ok); } .b-info { background:var(--infobg); border-color:var(--info); }
+  .big a { font-size:17px; font-weight:700; }
+  button.go { background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:10px 18px; font:inherit; font-weight:700; cursor:pointer; }
+  button.go:disabled { opacity:.5; cursor:default; } button.go:hover:not(:disabled) { background:var(--btnh); } button.plain { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 14px; font:inherit; cursor:pointer; }
+  .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; position:sticky; bottom:0; background:var(--bg); padding:12px 0; border-top:1px solid var(--line); }
+  .doc { overflow:auto; } .doc table { border-collapse:collapse; } .doc td { border:1px solid var(--line); padding:3px 9px; vertical-align:top; }
+  pre { margin:0 0 8px; background:var(--code); border:1px solid var(--line); border-radius:6px; padding:8px; overflow:auto; max-height:380px; font:12px/1.4 ui-monospace,Consolas,monospace; white-space:pre-wrap; word-break:break-word; }
+  .doc ol li { margin-bottom:8px; }
+  button.danger { color:var(--bad); border-color:var(--bad); font-weight:600; } button.danger:disabled { opacity:.5; cursor:default; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Create a defect on ADO</h1>
+  <p class="sub" id="sub">Loading the defect...</p>
+  <div id="banners"></div>
+  <div id="main" hidden>
+    <div class="card">
+      <label class="f" for="title">Title</label>
+      <input id="title" class="title" maxlength="250">
+      <div class="grid" id="fields"></div>
+    </div>
+    <div class="card"><h3 style="margin-top:0">Repro steps field</h3><p class="sub">Summary, expected and actual result, the steps to reproduce, the endpoints, every request with its payload and response, and how to run the test again.</p><div class="doc" id="repro"></div></div>
+    <div class="card"><h3 style="margin-top:0">System info field</h3><p class="sub">Environment and session (run) details.</p><div class="doc" id="system"></div></div>
+    <div class="actions">
+      <button class="go" id="create">Create defect on ADO</button>
+      <label id="forceBox" hidden><input type="checkbox" id="force"> create it anyway, even though one is already open</label>
+      <button class="plain" id="close">Close this page</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const id = new URLSearchParams(location.search).get('id') || '';
+const banner = (kind, html) => { const d = document.createElement('div'); d.className = 'banner b-' + kind; d.innerHTML = html; $('banners').appendChild(d); return d; };
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+$('close').addEventListener('click', () => { window.close(); if (!window.closed) location.href = '/'; });
+
+let bug, info;
+async function load() {
+  if (!id) return banner('bad', 'No test was chosen. Open this page with the "Create a defect on ADO" button of a test in the dashboard.');
+  let data;
+  try { data = await (await fetch('/api/bug-preview', { method: 'POST', body: JSON.stringify({ ids: [id] }) })).json(); }
+  catch (err) { return banner('bad', 'Could not prepare the defect: ' + esc(err)); }
+  info = data; bug = data.bugs[0];
+  if (!bug) return banner('bad', 'This test is not a known defect or an unexpected failure of the run the dashboard shows now (the run may have been replaced). Go back to the dashboard and use the button again.');
+
+  $('sub').textContent = 'This is exactly what will be published to ADO. Nothing is created until you click "Create defect on ADO".';
+  $('title').value = bug.title;
+  const fields = [['Project', data.project], ['Organization', data.orgUrl.replace(/^https?:\/\//, '')], ['Work item type', data.type], ['Severity', bug.severity], ['Priority', String(data.priority)],
+    ['Area path', data.areaPath || '(project default)'], ['Iteration path', data.iterationPath || '(project default)'], ['Result in the test run', bug.status === 'defect' ? 'Known defect' : 'Unexpected failure']];
+  $('fields').replaceChildren(...fields.map(([k, v]) => { const d = document.createElement('div'); d.innerHTML = '<b>' + esc(k) + '</b><span>' + esc(v) + '</span>'; return d; }));
+  const tags = document.createElement('div'); tags.innerHTML = '<b>Tags</b>' + bug.tags.map((t) => '<span class="chip">' + esc(t) + '</span>').join('');
+  const eps = document.createElement('div'); eps.innerHTML = '<b>Endpoints</b>' + (bug.endpoints.map((e) => '<span class="chip">' + esc(e) + '</span>').join('') || '(none recorded)');
+  $('fields').append(tags, eps);
+  $('repro').innerHTML = bug.reproSteps;     // built on the server with every value escaped, tokens and passwords removed
+  $('system').innerHTML = bug.systemInfo;
+  $('main').hidden = false;
+
+  if (!data.configured) { banner('warn', 'Azure DevOps is not set up: add <b>' + data.missing.map(esc).join(', ') + '</b> to .env. You can read the defect here, but it cannot be created yet.'); $('create').disabled = true; }
+  if (bug.checkError) banner('warn', 'Could not check whether this defect is already on the board: ' + esc(bug.checkError));
+  if (bug.existing) {
+    banner('warn', 'This defect is already on the board and still open: <a href="' + esc(bug.existing.url) + '" target="_blank">work item #' + bug.existing.id + '</a>. Creating it again needs the box below.');
+    $('forceBox').hidden = false; $('create').disabled = true;
+    $('force').addEventListener('change', () => { $('create').disabled = !$('force').checked || !data.configured; });
+  }
+}
+
+$('create').addEventListener('click', async () => {
+  $('create').disabled = true; $('create').textContent = 'Creating...';
+  let out;
+  try {
+    const r = await fetch('/api/bug-create', { method: 'POST', body: JSON.stringify({ force: $('force').checked, items: [{ id, title: $('title').value }] }) });
+    out = await r.json();
+    if (!r.ok) throw new Error(out.error || 'Azure DevOps refused the request.');
+  } catch (err) { banner('bad', 'The defect was not created: ' + esc(err.message || err)); $('create').disabled = false; $('create').textContent = 'Try again'; return; }
+  const res = out.results[0];
+  if (res.error) { banner('bad', 'The defect was not created: ' + esc(res.error)); $('create').disabled = false; $('create').textContent = 'Try again'; return; }
+  const link = '<a href="' + esc(res.url) + '" target="_blank">' + esc(res.url) + '</a>';
+  const box = banner(res.skipped ? 'warn' : 'ok', (res.skipped ? 'Not created: it is already open as work item #' + res.id + '.' : 'Created as work item #' + res.id + '.') + '<div class="big">' + link + '</div>');
+  $('create').textContent = res.skipped ? 'Not created' : 'Created';
+  $('title').disabled = true; $('forceBox').hidden = true;
+  if (!res.skipped) addDeleteButton(box, res.id);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// Deletes the work item that was just created. It moves to the ADO Recycle Bin (restorable); the server only deletes bugs this tool created.
+function addDeleteButton(box, workItemId) {
+  const del = document.createElement('button');
+  del.className = 'plain danger'; del.textContent = 'Delete this work item from ADO';
+  del.addEventListener('click', async () => {
+    if (!confirm('Delete work item #' + workItemId + ' from ADO?\n\nIt moves to the ADO Recycle Bin, where it can be restored.')) return;
+    del.disabled = true; del.textContent = 'Deleting...';
+    let out;
+    try { out = await (await fetch('/api/bug-delete', { method: 'POST', body: JSON.stringify({ workItemId }) })).json(); } catch (err) { out = { error: String(err) }; }
+    if (out.error) { del.disabled = false; del.textContent = 'Delete this work item from ADO'; const e = document.createElement('div'); e.textContent = 'Not deleted: ' + out.error; e.style.marginTop = '8px'; e.style.color = 'var(--bad)'; box.appendChild(e); return; }
+    box.className = 'banner b-info';
+    box.innerHTML = 'Deleted work item #' + workItemId + '. It is in the ADO Recycle Bin and can be restored from there. You can create the defect again below.';
+    $('title').disabled = false; $('create').disabled = !info.configured; $('create').textContent = 'Create defect on ADO';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  const wrap = document.createElement('div'); wrap.style.marginTop = '10px'; wrap.appendChild(del); box.appendChild(wrap);
+}
+
+load();
+</script>
+</body>
+</html>

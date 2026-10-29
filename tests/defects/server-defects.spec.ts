@@ -8,6 +8,10 @@ import { pace } from '../../src/pace';
 import * as crypto from 'crypto';
 import { Location, closeOrderAt, currentLocation, listOrdersAt, loadLocations, orderBodyFor, otherLocation, readOrderAt, saveOrderAt } from '../../src/location-helpers';
 
+import { cleanUpOpenOrder, createWorkOrder, WorkOrder } from '../../src/warranty-helpers';
+import { firstJobCode } from '../../src/line-item-helpers';
+import { STATUS, Template, deactivateTemplate, deleteSession, readSession, result, saveSession, saveTemplate, sessionBody, templateBody } from '../../src/inspection-helpers';
+
 test.beforeEach(pace);
 
 const { token } = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
@@ -468,4 +472,96 @@ test.describe('Known server defects in location handling', () => {
       }
     });
   }
+});
+
+// Inspections on a work order. Each case is written against the correct behaviour; the work order and the template are our own (the template is switched off at the end).
+test.describe('Known server defects in inspections', () => {
+  let wo: WorkOrder;
+  let template: Template;
+  const stamp = Date.now();
+  const text = async (res: any) => JSON.stringify(await json(res)).slice(0, 220);
+  const answer = () => result(template, 0, 0, 'poor');
+  /** Saves an inspection and removes it again if the API accepted it, so a defect does not leave data behind. */
+  const attempt = async (request: any, body: unknown, loc?: { dealerGuid: string }) => {
+    const saved = await saveSession(request, body, loc);
+    if (saved.id) await deleteSession(request, saved.id, loc);
+    return saved;
+  };
+
+  test.beforeAll(async ({ playwright }) => {
+    const ctx = await playwright.request.newContext({ baseURL: config.baseUrl });
+    const code = (await firstJobCode(ctx)).jobCode;
+    wo = await createWorkOrder(ctx, `AUTOMATION-INSP-DEF-${stamp}`);
+    template = (await saveTemplate(ctx, templateBody(`API-TEST inspection defects ${stamp}`, code, [{ name: 'Engine', items: ['Oil level'] }]))).template!;
+    await ctx.dispose();
+  });
+
+  test.afterAll(async ({ playwright }) => {
+    const ctx = await playwright.request.newContext({ baseURL: config.baseUrl });
+    if (template) await deactivateTemplate(ctx, template).catch(() => undefined);
+    if (wo) await cleanUpOpenOrder(ctx, wo.orderId).catch(() => undefined);
+    await ctx.dispose();
+  });
+
+  // The status is checked ("Status must be one of Draft, InProgress, Completed, Approved, Declined") but the rejection comes back as a 502.
+  test('INSP-DEF-01 An inspection with a status that does not exist is a 400, not a 502 [known defect]', async ({ request }) => {
+    const saved = await attempt(request, sessionBody(template, wo.orderId, 'Banana', [answer()]));
+    expect(saved.status, `HTTP ${saved.status}: ${JSON.stringify(saved.body).slice(0, 220)}`).toBe(400);
+  });
+
+  test('INSP-DEF-02 An inspection for a work order that does not exist is refused with a 4xx [known defect]', async ({ request }) => {
+    const saved = await attempt(request, sessionBody(template, 99999999, STATUS.draft, [answer()]));
+    expect(isClientError(saved.status), `HTTP ${saved.status}: the inspection was saved (id ${saved.id || 'none'}) for work order 99999999`).toBe(true);
+  });
+
+  test('INSP-DEF-03 An answer that points at a job of another work order is refused with a 4xx [known defect]', async ({ request }) => {
+    const saved = await attempt(request, sessionBody(template, wo.orderId, STATUS.draft, [result(template, 0, 0, 'poor', { jobId: 1 })]));
+    expect(isClientError(saved.status), `HTTP ${saved.status}: job 1 does not belong to work order ${wo.orderId} but the answer was saved with jobId ${saved.session?.results?.[0]?.jobId}`).toBe(true);
+  });
+
+  // Reading the inspection back gives every answer its module id; the answer to the save call has it empty.
+  test('INSP-DEF-04 The answers returned by the save call carry the module id like the ones read back [known defect]', async ({ request }) => {
+    const saved = await saveSession(request, sessionBody(template, wo.orderId, STATUS.draft, [answer()]));
+    try {
+      expect(saved.status, JSON.stringify(saved.body).slice(0, 200)).toBe(200);
+      const read = await readSession(request, saved.id);
+      expect(read.session.results[0].templateModuleId, 'module id when read back').toBe(template.modules[0].templateModuleId);
+      expect(saved.session.results[0].templateModuleId, 'module id in the answer to the save call').toBe(template.modules[0].templateModuleId);
+    } finally {
+      if (saved.id) await deleteSession(request, saved.id);
+    }
+  });
+
+  test.describe('across locations', () => {
+    let current: Location;
+    let other: Location;
+    let sessionId = '';
+
+    test.beforeAll(async ({ playwright }) => {
+      const ctx = await playwright.request.newContext({ baseURL: config.baseUrl });
+      const { locations } = await loadLocations(ctx);
+      current = currentLocation(locations)!;
+      other = (current && otherLocation(locations, current))!;
+      sessionId = (await saveSession(ctx, sessionBody(template, wo.orderId, STATUS.draft, [answer()]))).id;
+      await ctx.dispose();
+    });
+
+    test.afterAll(async ({ playwright }) => {
+      const ctx = await playwright.request.newContext({ baseURL: config.baseUrl });
+      if (sessionId) await deleteSession(ctx, sessionId).catch(() => 0);
+      await ctx.dispose();
+    });
+
+    test('INSP-DEF-05 Reading an inspection of this location through another location is a 404, not a 502 [known defect]', async ({ request }) => {
+      test.skip(!other, 'this company has only one location');
+      const read = await readSession(request, sessionId, other);
+      expect(isClientError(read.status), `HTTP ${read.status}: ${JSON.stringify(read.body).slice(0, 200)}`).toBe(true);
+    });
+
+    test('INSP-DEF-06 Saving an inspection through another location for this location\'s work order and template is a 4xx, not a 502 [known defect]', async ({ request }) => {
+      test.skip(!other, 'this company has only one location');
+      const saved = await attempt(request, sessionBody(template, wo.orderId, STATUS.draft, [answer()]), other);
+      expect(isClientError(saved.status), `HTTP ${saved.status}: ${JSON.stringify(saved.body).slice(0, 200)}`).toBe(true);
+    });
+  });
 });

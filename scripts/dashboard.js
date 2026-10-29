@@ -9,6 +9,7 @@ const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
 const { root, workDir, loadEndpoints, endpointFor } = require('./lib');
+const { adoConfig, buildBug, findExisting, createInAdo, deleteFromAdo } = require('./bug-report');
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? 9000);
 const runsDir = path.join(workDir, 'runs');
@@ -110,6 +111,17 @@ function coverage() {
   });
 }
 
+// ---- bugs for the Azure DevOps board ----------------------------------------------------------------------------------
+/** The bug for one failed test of the current run, or undefined. Only known defects and unexpected failures can be reported. */
+function bugFor(id) {
+  const t = state.tests.get(id);
+  if (!t || (t.status !== 'defect' && t.status !== 'failed')) return undefined;
+  const all = [...state.tests.values()];
+  const eps = endpoints();
+  const runFile = state.startedAt ? `run-${state.startedAt.replace(/[:.]/g, '-')}.json` : '';
+  return buildBug(t, state, { index: all.indexOf(t) + 1, total: all.length, runFile, endpointInfo: (key) => eps.find((e) => e.key === key) });
+}
+
 // ---- http -----------------------------------------------------------------------------------------------------------
 const json = (res, body, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { const parts = []; req.on('data', (c) => parts.push(c)); req.on('end', () => resolve(Buffer.concat(parts).toString('utf8'))); });
@@ -140,6 +152,44 @@ http.createServer(async (req, res) => {
     state = { ...saved, tests: new Map(saved.tests.map((t) => [t.id, t])) };
     broadcast({ type: 'state', state: snapshot() });
     json(res, { ok: true });
+  } else if (req.method === 'POST' && url.pathname === '/api/bug-preview') {
+    // Builds the bug for each failed test (and checks Azure DevOps for one that is already open). Nothing is created here.
+    const { ids = [] } = JSON.parse((await readBody(req)) || '{}');
+    const cfg = adoConfig();
+    const bugs = [];
+    for (const id of ids) {
+      const bug = bugFor(id);
+      if (!bug) continue;
+      const existing = cfg.missing.length ? null : await findExisting(cfg, bug);
+      bugs.push({ id, title: bug.title, severity: bug.severity, status: bug.status, tags: bug.tags, endpoints: bug.endpoints, reproSteps: bug.reproSteps, systemInfo: bug.systemInfo, existing: existing?.id ? existing : null, checkError: existing?.error ?? '' });
+    }
+    json(res, { configured: !cfg.missing.length, missing: cfg.missing, orgUrl: cfg.orgUrl, project: cfg.project, type: cfg.type, areaPath: cfg.areaPath, iterationPath: cfg.iterationPath, priority: 2, bugs });
+  } else if (req.method === 'POST' && url.pathname === '/api/bug-delete') {
+    // Deletes a bug this page created (to the ADO Recycle Bin). The page asks the user to confirm first.
+    const { workItemId } = JSON.parse((await readBody(req)) || '{}');
+    const cfg = adoConfig();
+    if (cfg.missing.length) return json(res, { error: `Set ${cfg.missing.join(', ')} in .env first.` }, 400);
+    const out = await deleteFromAdo(cfg, Number(workItemId));
+    json(res, out, out.error ? 400 : 200);
+  } else if (url.pathname === '/bug') {
+    // The page that shows one defect as it will be published and creates it on request.
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(fs.readFileSync(path.join(__dirname, 'bug.html')));
+  } else if (req.method === 'POST' && url.pathname === '/api/bug-create') {
+    // Creates the bugs the user confirmed. A test that already has an open bug is skipped unless `force` is set.
+    const { items = [], force = false } = JSON.parse((await readBody(req)) || '{}');
+    const cfg = adoConfig();
+    if (cfg.missing.length) return json(res, { error: `Set ${cfg.missing.join(', ')} in .env first.` }, 400);
+    const results = [];
+    for (const { id, title } of items) {
+      const bug = bugFor(id);
+      if (!bug) { results.push({ id, error: 'This test is not in the current run.' }); continue; }
+      const existing = force ? null : await findExisting(cfg, bug);
+      if (existing?.error) { results.push({ id, error: existing.error }); continue; }
+      if (existing) { results.push({ id, skipped: true, ...existing }); continue; }
+      results.push({ id, ...(await createInAdo(cfg, bug, (title || '').trim().slice(0, 250))) });
+    }
+    json(res, { results });
   } else if (url.pathname === '/' || url.pathname === '/index.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(fs.readFileSync(path.join(__dirname, 'dashboard.html')));
