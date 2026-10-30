@@ -22,14 +22,7 @@ const BODY_LIMIT = 8000;
 let state = { status: 'idle', startedAt: null, finishedAt: null, label: '', tests: new Map() };
 const clients = new Set();
 
-// Start on the newest saved run so a restart does not show an empty page.
-try {
-  const saved = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((n) => n.endsWith('.json')).sort().pop() : undefined;
-  if (saved) {
-    const run = JSON.parse(fs.readFileSync(path.join(runsDir, saved), 'utf8'));
-    state = { ...run, tests: new Map(run.tests.map((t) => [t.id, t])) };
-  }
-} catch { /* an unreadable run file is ignored */ }
+// The page starts empty; earlier runs are opened on request from the "Saved runs" list.
 
 // ---- helpers --------------------------------------------------------------------------------------------------------
 const trim = (v) => {
@@ -146,6 +139,34 @@ function runInfo(file) {
   return runInfoCache.get(file);
 }
 
+// ---- the tests of a module, listed without running them -------------------------------------------------------------------
+const listCache = new Map();
+/** The tests a module would run (Playwright's own --list, so nothing is sent to the API), as dashboard rows that have not run yet. */
+function listModule(mod) {
+  if (listCache.has(mod.id)) return Promise.resolve(listCache.get(mod.id));
+  const args = ['test', '--list', ...mod.files, ...(mod.grep ? ['-g', mod.grep] : [])];
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [require.resolve('@playwright/test/cli'), ...args], { cwd: root, env: { ...process.env, ...(mod.env ?? {}), LIST_ONLY: 'true' } });
+    let out = '';
+    child.stdout.on('data', (b) => { out += b.toString('utf8'); });
+    child.on('close', () => {
+      const rows = [];
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.match(/^\s*(?:\[[^\]]*\]\s*›\s*)?(\S+?):(\d+):\d+ › (.+)$/);
+        if (!m) continue;
+        const parts = m[3].split(' › ');
+        rows.push({
+          id: 'preview-' + rows.length, title: parts[parts.length - 1], group: parts.slice(0, -1).join(' › '), file: m[1].replace(/\\/g, '/').replace(/^tests\//, ''), line: Number(m[2]),
+          status: 'queued', ms: 0, startedAt: null, error: '', skipReason: '', requests: 0, endpoints: [],
+        });
+      }
+      if (rows.length) listCache.set(mod.id, rows);
+      resolve(rows);
+    });
+    child.on('error', () => resolve([]));
+  });
+}
+
 // ---- running modules from the runner page ------------------------------------------------------------------------------
 let job = null; // { module, child, startedAt, log: string[], exit: number|null }
 
@@ -162,14 +183,35 @@ function startRun(mod) {
   const token = savedToken();
   const env = { ...process.env, ...(mod.env ?? {}), ...(token ? { API_TOKEN: token, REUSE_TOKEN: 'true' } : {}) };
   const args = ['playwright', 'test', ...mod.files, ...(mod.grep ? ['-g', mod.grep] : [])];
-  const child = spawn('npx', args, { cwd: root, env, shell: true });
+  // Playwright's own entry point, started without a shell: a shell would split a test filter such as "Deposit|PAY-DEF" at the |.
+  const child = spawn(process.execPath, [require.resolve('@playwright/test/cli'), ...args.slice(1)], { cwd: root, env });
   job = { module: mod.id, name: mod.name, child, startedAt: new Date().toISOString(), log: [], exit: null, login: token ? 'reused the saved token (no login call)' : 'logs in once at the start' };
   const keep = (b) => { job.log.push(...b.toString('utf8').split(/\r?\n/).filter(Boolean)); if (job.log.length > 200) job.log.splice(0, job.log.length - 200); };
   child.stdout.on('data', keep); child.stderr.on('data', keep);
-  child.on('close', (code) => { job.exit = code ?? 1; });
+  child.on('close', (code) => { job.exit = code ?? 1; endStaleRun(); });
 }
 
 const running = () => !!job && job.exit === null;
+
+/** The test process has ended but the page still shows a run in progress (it was stopped or crashed): mark what never ran as skipped and finish the run. */
+function endStaleRun() {
+  if (state.status !== 'running') return;
+  for (const t of state.tests.values()) {
+    if (t.status === 'queued' || t.status === 'running') { t.status = 'skipped'; t.skipReason = 'The run was stopped before this test finished.'; }
+  }
+  state.status = 'finished';
+  state.finishedAt = new Date().toISOString();
+  if (state.startedAt) save();
+  broadcast({ type: 'state', state: snapshot() });
+}
+
+/** Back to an empty page: stops a run that is still going and forgets the shown results (saved runs stay). */
+function resetRun() {
+  if (running()) spawn('taskkill', ['/pid', String(job.child.pid), '/T', '/F'], { stdio: 'ignore' });
+  job = null;
+  state = { status: 'idle', startedAt: null, finishedAt: null, label: '', tests: new Map() };
+  broadcast({ type: 'state', state: snapshot() });
+}
 const jobStatus = () => job && { module: job.module, name: job.name, startedAt: job.startedAt, running: running(), exit: job.exit, login: job.login, tail: job.log.slice(-8) };
 
 // ---- http -----------------------------------------------------------------------------------------------------------
@@ -194,9 +236,23 @@ http.createServer(async (req, res) => {
     const { module: id } = JSON.parse((await readBody(req)) || '{}');
     const mod = MODULES.find((m) => m.id === id);
     if (!mod) return json(res, { error: 'Unknown module.' }, 404);
-    if (running() || state.status === 'running') return json(res, { error: 'A run is already in progress.', job: jobStatus() }, 409);
+    if (running()) return json(res, { error: 'A run is already in progress.', job: jobStatus() }, 409);
+    if (state.status === 'running') endStaleRun();      // a leftover "running" page whose test process is gone
     startRun(mod);
     json(res, { ok: true, job: jobStatus() });
+  } else if (url.pathname === '/api/module-tests') {
+    const mod = MODULES.find((m) => m.id === url.searchParams.get('module'));
+    json(res, mod ? await listModule(mod) : []);
+  } else if (req.method === 'POST' && url.pathname === '/api/run-fresh') {
+    // A page opened for a module starts empty, unless a run is going right now.
+    if (!running() && state.status !== 'running' && state.status !== 'idle') {
+      state = { status: 'idle', startedAt: null, finishedAt: null, label: '', tests: new Map() };
+      broadcast({ type: 'state', state: snapshot() });
+    }
+    json(res, { ok: true });
+  } else if (req.method === 'POST' && url.pathname === '/api/run-reset') {
+    resetRun();
+    json(res, { ok: true });
   } else if (req.method === 'POST' && url.pathname === '/api/run-stop') {
     if (running()) spawn('taskkill', ['/pid', String(job.child.pid), '/T', '/F'], { stdio: 'ignore' });
     json(res, { ok: true });

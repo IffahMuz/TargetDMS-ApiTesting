@@ -41,7 +41,7 @@
 <body>
 <div class="wrap">
   <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state">READY</span></div>
-  <p class="sub">Choose a module to run. The live dashboard opens in a new tab and shows the run as it happens.</p>
+  <p class="sub">Choose a module. The live dashboard opens in a new tab with a Run button; the run starts when you click it.</p>
   <div id="err" class="err" hidden></div>
   <div id="now" class="now" hidden>
     <div class="grow"><b id="nowName"></b><small id="nowInfo"></small></div>
@@ -66,7 +66,7 @@ function render() {
   const shown = data.modules.filter((m) => !q || (m.name + ' ' + m.description).toLowerCase().includes(q));
   $('count').textContent = shown.length + ' of ' + data.modules.length + ' modules';
   $('grid').innerHTML = shown.map((m) => '<button class="mod" data-id="' + esc(m.id) + '"' + (busy ? ' disabled' : '') + '><b>' + esc(m.name) + '</b><p>' + esc(m.description) + '</p>' +
-    '<span class="meta">' + (m.finalizes ? '<span class="chip warn">checks orders out</span>' : '<span class="chip">no checkouts</span>') + '<span class="go">Run</span></span></button>').join('');
+    '<span class="meta">' + (m.finalizes ? '<span class="chip warn">checks orders out</span>' : '<span class="chip">no checkouts</span>') + '<span class="go">Open</span></span></button>').join('');
 }
 
 async function refresh() {
@@ -80,16 +80,10 @@ async function refresh() {
   }
 }
 
-$('grid').addEventListener('click', async (e) => {
+// A module opens the dashboard in a new tab. The run starts there, when the user clicks Run.
+$('grid').addEventListener('click', (e) => {
   const btn = e.target.closest('.mod'); if (!btn || btn.disabled) return;
-  const m = data.modules.find((x) => x.id === btn.dataset.id);
-  if (m.finalizes && !confirm('"' + m.name + '" really checks orders out. That finalizes orders, uses stock and leaves payments behind on the test dealer.\n\nRun it?')) return;
-  const tab = window.open('/', '_blank');     // opened on the click so the browser allows it
-  $('err').hidden = true;
-  let out;
-  try { out = await (await fetch('/api/run', { method: 'POST', body: JSON.stringify({ module: m.id }) })).json(); } catch (err) { out = { error: String(err) }; }
-  if (out.error) { if (tab) tab.close(); $('err').textContent = 'Could not start "' + m.name + '": ' + out.error; $('err').hidden = false; }
-  refresh();
+  window.open('/?module=' + encodeURIComponent(btn.dataset.id), '_blank');
 });
 $('stop').addEventListener('click', async () => { await fetch('/api/run-stop', { method: 'POST' }); setTimeout(refresh, 1500); });
 $('q').addEventListener('input', render);

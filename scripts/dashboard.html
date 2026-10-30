@@ -53,6 +53,8 @@
   .nums, .gname { color:var(--mute); font-size:12px; } .nums b { font-weight:700; }
   .n-pass { color:var(--ok); } .n-def { color:var(--def); } .n-fail { color:var(--bad); } .n-skip { color:var(--warn); }
   .body { padding:10px 12px 12px; }
+  .plain { background:var(--warnbg); border-left:4px solid var(--warn); padding:10px 14px; border-radius:6px; margin:6px 0; }
+  .plain b { display:block; margin-bottom:2px; } .plain.net { background:var(--infobg); border-color:var(--info); } .plain.net b { color:var(--info); }
   .note { background:var(--warnbg); border-left:4px solid var(--warn); padding:8px 12px; border-radius:6px; margin:4px 0; }
   .err { background:var(--badbg); border-left:4px solid var(--bad); padding:8px 12px; border-radius:6px; margin:6px 0; white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Consolas,monospace; }
   .ex { border:1px solid var(--line); border-radius:8px; margin:8px 0; }
@@ -71,12 +73,19 @@
   .empty { color:var(--mute); padding:20px; text-align:center; }
   /* narrow screens: the result, title and timing stack, but the ADO button stays on the same line, at the right of the row */
   @media (max-width:760px) { .row > summary, .erow > summary { grid-template-columns:minmax(0,1fr) auto; } .row > summary > :not(.btn) { grid-column:1; } .row > summary > .btn.ado { grid-column:2; grid-row:1 / span 4; align-self:center; } .cols { grid-template-columns:1fr; } }
+  .modname { color:var(--mute); font-weight:600; }
+  .msg { margin:6px 0 10px; padding:8px 12px; border-radius:8px; background:var(--infobg); color:var(--info); white-space:pre-wrap; word-break:break-word; }
+  .msg.bad { background:var(--badbg); color:var(--bad); }
+  .runbtn { background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:9px 26px; font:inherit; font-weight:700; cursor:pointer; }
+  .runbtn:hover:not(:disabled) { background:var(--btnh); } .runbtn:disabled { opacity:.5; cursor:default; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state s-idle">WAITING FOR A RUN</span>
-    <select id="runs" class="btn" title="Open a saved run"><option value="">Saved runs</option></select></div>
+    <select id="runs" class="btn" title="Open a saved run"><option value="">Saved runs</option></select>
+    <span id="modname" class="modname" hidden></span><button class="runbtn" id="gorun" hidden>Run</button><button class="btn" id="gostop" hidden>Stop</button><button class="btn" id="goreset" hidden title="Clear this page and show the Run button again">Reset</button></div>
+  <p class="msg" id="modmsg" hidden></p>
   <p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p>
   <div class="progress" id="progress"><i style="background:var(--ok)"></i><i style="background:var(--def)"></i><i style="background:var(--bad)"></i><i style="background:var(--warn)"></i></div>
   <div class="cards" id="cards"></div>
@@ -133,7 +142,7 @@ function renderHeader() {
   st.textContent = run.status === 'running' ? 'RUNNING' : run.status === 'finished' ? 'FINISHED' : 'WAITING FOR A RUN';
   $('sub').textContent = run.startedAt ? `Dealer ${run.dealer} - started ${new Date(run.startedAt).toLocaleTimeString()}` +
     (run.status === 'finished' ? ` - ended ${new Date(run.finishedAt).toLocaleTimeString()} - took ${fmtDur(new Date(run.finishedAt) - new Date(run.startedAt))}` : ` - ${fmtDur(Date.now() - new Date(run.startedAt))} so far`) +
-    ` - ${done} of ${total} tests done` : 'Start the suite with npm test; tests appear here as they run.';
+    ` - ${done} of ${total} tests done` : 'Not run yet. Click Run (or start the suite with npm test); the tests appear here as they run.';
   const cards = [[total, 'test cases', ''], [count('passed'), 'passed', 'c-ok'], [count('defect'), 'failed: known server defects', 'c-def'], [count('failed'), 'failed: unexpected', 'c-bad'],
     [count('skipped'), 'skipped', 'c-warn'], [count('queued') + count('running'), 'still to finish', 'c-info']];
   $('cards').replaceChildren(...cards.map(([n, l, c]) => el('div', 'card ' + c, null, [el('b', '', n), el('span', '', l)])));
@@ -157,12 +166,37 @@ function exchange(x, open) {
   return d;
 }
 
+// The reason for a failure in plain words, for people who do not read error messages.
+// Returns { net: true } for problems of the test machine or network (not the API), so they can be told apart.
+function explain(t, detail) {
+  const err = detail.error || '';
+  const last = (detail.exchanges || []).filter((x) => !(x.method === 'DELETE')).slice(-1)[0] || (detail.exchanges || []).slice(-1)[0];
+  const got = (err.match(/Received:\s*(\d{3})\b/) || err.match(/HTTP (\d{3})/) || [])[1] || (last && last.status ? String(last.status) : '');
+  const want = (err.match(/Expected:\s*(\d{3})\b/) || [])[1] || '';
+  const serverMessage = ((err.match(/"Message":"([^"]{5,200})"/) || [])[1] || '').replace(/\\r\\n/g, ' ');
+  if (/ECONNRESET|socket hang up|ECONNREFUSED/i.test(err)) return { net: true, text: 'The connection to the test server was cut while this test was running. That is a network problem on the way to the server, not a fault found in the API. Run the test again; if it keeps happening, check the network or VPN.' };
+  if (/Timeout \d+ms exceeded|timed out/i.test(err)) return { net: true, text: 'The server did not answer in time (the test waits up to 30 seconds). The server or the network was too slow, which is not necessarily a fault in the API. Run the test again.' };
+  if (/ENOTFOUND|EAI_AGAIN/i.test(err)) return { net: true, text: 'The test machine could not find the server address (a DNS or internet problem). No request reached the API. Check the connection and run the test again.' };
+  if (got === '429') return { net: true, text: 'The API refused the request because too many requests were sent in a short time (a rate limit). Wait a few minutes and run the test again.' };
+  if (got === '401' && want !== '401') return { net: true, text: 'The API said the login is not valid (401). The saved login probably expired. Run again so a fresh login is used.' };
+  const said = serverMessage ? ' The API said: "' + serverMessage + '".' : '';
+  if (/^5/.test(got) && !/^5/.test(want)) return { text: 'The API crashed or failed on its own side (error ' + got + ') for a request that should have been answered with a clear message' + (want ? ' (a ' + want + ' answer was expected)' : '') + '. A wrong request must be refused with a plain 4xx answer, not a server error.' + said };
+  if (got && want && got !== want) return { text: 'The API answered ' + got + ' but the correct answer is ' + want + '.' + said };
+  if (/^2/.test(got) && /toBe\(false\)|toBe\(true\)|toEqual|toContain|toBeGreater/.test(err + '')) return { text: 'The API accepted the request, but what it returned or did is not what it should be. Open the request and the response below to see the difference.' + said };
+  if (/Expected/.test(err) && /Received/.test(err)) return { text: 'The API answered, but a value in the answer is different from what the test expects. The error below shows what was expected and what came back.' + said };
+  return { text: 'The test stopped because one of its checks did not hold. Open the requests and responses below to see what was sent and what came back.' + said };
+}
+
 async function fillBody(d, t, focusEndpoint) {
   const body = el('div', 'body', 'Loading...');
   d.appendChild(body);
   const detail = await (await fetch('/api/test/' + encodeURIComponent(t.id))).json();
   body.replaceChildren(el('div', 'gname', `${t.file}:${t.line}` + (t.group ? '  |  ' + t.group : '')));
   if (detail.skipReason) body.appendChild(el('div', 'note', 'Skipped: ' + detail.skipReason));
+  if (detail.error && (t.status === 'failed' || t.status === 'defect')) {
+    const why = explain(t, detail);
+    body.appendChild(el('div', 'plain' + (why.net ? ' net' : ''), null, [el('b', '', why.net ? 'What went wrong (not an API fault)' : t.status === 'defect' ? 'What went wrong (a known problem in the API)' : 'What went wrong'), el('span', '', why.text)]));
+  }
   if (detail.error) body.appendChild(el('div', 'err', detail.error));
   const list = focusEndpoint ? detail.exchanges.filter((x) => x.endpoint === focusEndpoint) : detail.exchanges;
   if (!detail.exchanges.length) body.appendChild(el('div', 'gname', t.status === 'skipped' ? 'No requests were sent.' : 'No requests were recorded for this test.'));
@@ -302,6 +336,52 @@ $('runs').addEventListener('change', async () => {
   const r = await fetch('/api/load', { method: 'POST', body: JSON.stringify({ file: $('runs').value }) });
   if (!r.ok) alert((await r.json()).error);
 });
+// ---- opened from the runner page with ?module=<id>: show a Run button and start the run only when it is clicked ----
+const modId = new URLSearchParams(location.search).get('module');
+let modInfo = null, clickedAt = 0;
+const say = (text, bad) => { const m = $('modmsg'); m.textContent = text; m.className = 'msg' + (bad ? ' bad' : ''); m.hidden = !text; };
+async function pollModule() {
+  let info; try { info = await (await fetch('/api/modules', { cache: 'no-store' })).json(); } catch { return; }
+  const job = info.job && info.job.module === modId ? info.job : null;
+  const live = run.status === 'running' && clickedAt && new Date(run.startedAt) >= clickedAt - 2000;
+  $('gorun').disabled = !!(info.job && info.job.running);
+  $('gostop').hidden = !(info.job && info.job.running);
+  $('gorun').textContent = clickedAt && run.status === 'finished' ? 'Run again' : 'Run';
+  if (job && job.running && !live) say(job.login === undefined ? 'Starting...' : 'Starting: ' + job.login + '. Loading the tests...');
+  else if (job && !job.running && clickedAt && tests.size === 0) say('The run ended without running any test (exit code ' + job.exit + '). Last output:\n' + job.tail.join('\n'), true);
+  else if (live) say('');
+}
+// The tests of the module are listed (as waiting) before anything is run.
+async function showPlanned() {
+  let rows = [];
+  try { rows = await (await fetch('/api/module-tests?module=' + encodeURIComponent(modId))).json(); } catch { return; }
+  if (run.status === 'idle' || run.status === undefined) applyState({ status: 'idle', startedAt: null, finishedAt: null, dealer: run.dealer, tests: rows });
+}
+async function initModule() {
+  await fetch('/api/run-fresh', { method: 'POST' }).catch(() => {});
+  showPlanned();
+  const info = await (await fetch('/api/modules', { cache: 'no-store' })).json();
+  modInfo = info.modules.find((m) => m.id === modId);
+  $('gorun').hidden = false; $('goreset').hidden = false; $('modname').hidden = false;
+  if (!modInfo) { $('modname').textContent = 'Unknown module'; $('gorun').disabled = true; say('There is no module "' + modId + '". Go back to the runner page and choose one.', true); return; }
+  document.title = modInfo.name + ' - Integration Tests Live Runner';
+  $('modname').textContent = modInfo.name; $('modname').title = modInfo.description; $('gorun').title = 'Run: ' + modInfo.name;
+  $('gorun').addEventListener('click', async () => {
+    if (modInfo.finalizes && !confirm('"' + modInfo.name + '" really checks orders out. That finalizes orders, uses stock and leaves payments behind on the test dealer.\n\nRun it?')) return;
+    clickedAt = Date.now(); $('gorun').disabled = true; say('Starting...');
+    const out = await (await fetch('/api/run', { method: 'POST', body: JSON.stringify({ module: modId }) })).json().catch((e) => ({ error: String(e) }));
+    if (out.error) { clickedAt = 0; $('gorun').disabled = false; say('Could not start: ' + out.error, true); }
+  });
+  $('gostop').addEventListener('click', async () => { $('gostop').disabled = true; say('Stopping...'); await fetch('/api/run-stop', { method: 'POST' }); setTimeout(() => { $('gostop').disabled = false; pollModule(); }, 1500); });
+  $('goreset').addEventListener('click', async () => {
+    $('goreset').disabled = true;
+    await fetch('/api/run-reset', { method: 'POST' });
+    clickedAt = 0; say(''); showPlanned(); $('gorun').disabled = false; $('gorun').textContent = 'Run'; $('gostop').hidden = true;
+    $('goreset').disabled = false; pollModule();
+  });
+  setInterval(pollModule, 1500); pollModule();
+}
+if (modId) initModule();
 loadRuns();
 setInterval(loadRuns, 15000);
 </script>
