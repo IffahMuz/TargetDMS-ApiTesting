@@ -8,8 +8,9 @@ import { pace } from '../../src/pace';
 import * as crypto from 'crypto';
 import { Location, closeOrderAt, currentLocation, listOrdersAt, loadLocations, orderBodyFor, otherLocation, readOrderAt, saveOrderAt } from '../../src/location-helpers';
 
-import { cleanUpOpenOrder, createWorkOrder, WorkOrder } from '../../src/warranty-helpers';
+import { cashPayment, cleanUpOpenOrder, createWorkOrder, WorkOrder } from '../../src/warranty-helpers';
 import { firstJobCode } from '../../src/line-item-helpers';
+import { DEPOSIT, depositBody, orderPayments, postDeposit, standingOrders, transient } from '../../src/payment-helpers';
 import { STATUS, Template, deactivateTemplate, deleteSession, readSession, result, saveSession, saveTemplate, sessionBody, templateBody } from '../../src/inspection-helpers';
 
 test.beforeEach(pace);
@@ -563,5 +564,51 @@ test.describe('Known server defects in inspections', () => {
       const saved = await attempt(request, sessionBody(template, wo.orderId, STATUS.draft, [answer()]), other);
       expect(isClientError(saved.status), `HTTP ${saved.status}: ${JSON.stringify(saved.body).slice(0, 200)}`).toBe(true);
     });
+  });
+});
+
+test.describe('Known server defects in payment deposits', () => {
+  const text = (status: number, body: unknown) => `HTTP ${status}: ${JSON.stringify(body).slice(0, 220)}`;
+
+  test('PAY-DEF-01 A payment that already has a payment id is a 400, not a 502 [known defect]', async ({ request }) => {
+    const orders = await standingOrders(request);
+    const res = await transient(() => postDeposit(request, depositBody([{ orderId: orders.workOrderId, appliedAmount: DEPOSIT }], {}, { arPaymentId: 123456 })));
+    expect(isClientError(res.status()), text(res.status(), await json(res))).toBe(true);
+  });
+
+  test('PAY-DEF-02 A deposit for an order that does not exist is a 4xx, not a 502 [known defect]', async ({ request }) => {
+    const orders = await standingOrders(request);
+    const res = await transient(() => postDeposit(request, depositBody([{ orderId: 999999999, appliedAmount: DEPOSIT }])));
+    expect(isClientError(res.status()), text(res.status(), await json(res))).toBe(true);
+    expect(orders.workOrderId).toBeGreaterThan(0);
+  });
+
+  test('PAY-DEF-04 The same order twice in one deposit is a 400, not a 502 [known defect]', async ({ request }) => {
+    const orders = await standingOrders(request);
+    const split = [{ orderId: orders.workOrderId, appliedAmount: 5 }, { orderId: orders.workOrderId, appliedAmount: 5 }];
+    const res = await transient(() => postDeposit(request, depositBody(split)));
+    expect(isClientError(res.status()), text(res.status(), await json(res))).toBe(true);
+  });
+
+  test('PAY-DEF-05 Checkout with takeDeposit and an excess payment action other than LeaveAsDeposit is a 400, not a 502 [known defect]', async ({ request }) => {
+    const wo = await createWorkOrder(request, `AUTOMATION-PAY-DEF-${Date.now()}`);
+    try {
+      const res = await transient(() => request.post(`/api/v1/Order/Checkout/${config.dealerGuid}`, {
+        headers, timeout: config.timeoutMs, data: { orderId: wo.orderId, orderSource: 'TargetDMSWeb', takeDeposit: true, paymentAction: 'GiveChange', payments: [cashPayment(wo, DEPOSIT)] },
+      }));
+      expect(isClientError(res.status()), text(res.status(), await json(res))).toBe(true);
+    } finally { await cleanUpOpenOrder(request, wo.orderId).catch(() => undefined); }
+  });
+
+  test('PAY-DEF-03 A deposit sent through another location for an order of this location is refused [known defect]', async ({ request }) => {
+    const { locations } = await loadLocations(request);
+    const here = currentLocation(locations);
+    const there = here && otherLocation(locations, here);
+    test.skip(!there, 'this company has only one location');
+    const orders = await standingOrders(request);
+    const before = (await orderPayments(request, orders.workOrderId)).total;
+    const res = await postDeposit(request, depositBody([{ orderId: orders.workOrderId, appliedAmount: DEPOSIT }]), headers, there!.dealerGuid);
+    const after = (await orderPayments(request, orders.workOrderId)).total;
+    expect(isClientError(res.status()) && after === before, `${text(res.status(), await json(res))}; payments before ${before}, after ${after}`).toBe(true);
   });
 });
