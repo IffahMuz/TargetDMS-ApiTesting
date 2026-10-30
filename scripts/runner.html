@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integration Tests Live Runner - choose a module</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mute:#5b6675; --line:#e2e6ec; --ok:#1a7f4b; --bad:#b42318; --warn:#a15c00; --info:#1d4ed8; --def:#7a3db8;
+          --btn:#1d4ed8; --btnh:#1e40af; --btnb:#1d4ed8; --okbg:#e6f4ec; --badbg:#fdeceb; --warnbg:#fff4e0; --infobg:#e8effd; --defbg:#f1e8fb; --code:#f0f2f5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1a2028; --ink:#e8ecf2; --mute:#9aa6b6; --line:#2b3440; --ok:#5fcf93; --bad:#ff8a80; --warn:#f5b85a; --info:#8ab4ff; --def:#c9a2f5;
+          --okbg:#16301f; --badbg:#3a1c1a; --warnbg:#392a10; --infobg:#17233f; --defbg:#2b1d3f; --code:#0f1318; --btn:#17233f; --btnh:#223564; --btnb:#3a5aa6; } }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,"Segoe UI",sans-serif; }
+  .wrap { max-width:1280px; margin:0 auto; padding:20px 16px 60px; }
+  .top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:4px; }
+  h1 { font-size:22px; margin:0; }
+  .state { font-weight:700; font-size:12px; padding:3px 12px; border-radius:999px; background:var(--line); color:var(--mute); }
+  .state.run { background:var(--infobg); color:var(--info); } .state.run::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--info); margin-right:7px; animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.25; } }
+  .sub { color:var(--mute); margin:2px 0 14px; }
+  .now { background:var(--infobg); border-left:4px solid var(--info); border-radius:8px; padding:10px 14px; margin-bottom:14px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .now .grow { flex:1; min-width:240px; } .now small { display:block; color:var(--mute); }
+  .err { background:var(--badbg); border-left:4px solid var(--bad); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:center; }
+  .bar input, .btn { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; }
+  .bar input { flex:1; min-width:220px; } .btn { cursor:pointer; } .btn:hover { background:var(--infobg); }
+  .count { color:var(--mute); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:10px; }
+  .mod { text-align:left; font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; cursor:pointer; display:flex; flex-direction:column; gap:6px; }
+  .mod:hover:not(:disabled) { border-color:var(--btnb); background:var(--infobg); }
+  .mod:disabled { opacity:.5; cursor:default; }
+  .mod b { font-size:15px; } .mod p { margin:0; color:var(--mute); font-size:13px; flex:1; }
+  .meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; color:var(--mute); }
+  .chip { display:inline-block; border-radius:999px; padding:1px 10px; font-size:12px; font-weight:600; background:var(--infobg); color:var(--info); }
+  .chip.warn { background:var(--warnbg); color:var(--warn); }
+  .go { margin-left:auto; background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:4px 14px; font-weight:700; }
+  .mod:hover:not(:disabled) .go { background:var(--btnh); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state">READY</span></div>
+  <p class="sub">Choose a module to run. The live dashboard opens in a new tab and shows the run as it happens.</p>
+  <div id="err" class="err" hidden></div>
+  <div id="now" class="now" hidden>
+    <div class="grow"><b id="nowName"></b><small id="nowInfo"></small></div>
+    <a class="btn" href="/" target="_blank">Open the dashboard</a>
+    <button class="btn" id="stop">Stop the run</button>
+  </div>
+  <div class="bar"><input id="q" placeholder="Search modules"><span class="count" id="count"></span></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+let data = { modules: [], job: null };
+
+function render() {
+  const busy = !!data.job && data.job.running;
+  $('state').textContent = busy ? 'RUNNING' : 'READY'; $('state').className = 'state' + (busy ? ' run' : '');
+  $('now').hidden = !busy;
+  if (busy) { $('nowName').textContent = 'Running: ' + data.job.name; $('nowInfo').textContent = 'Started ' + new Date(data.job.startedAt).toLocaleTimeString() + ' - ' + data.job.login; }
+  const q = $('q').value.trim().toLowerCase();
+  const shown = data.modules.filter((m) => !q || (m.name + ' ' + m.description).toLowerCase().includes(q));
+  $('count').textContent = shown.length + ' of ' + data.modules.length + ' modules';
+  $('grid').innerHTML = shown.map((m) => '<button class="mod" data-id="' + esc(m.id) + '"' + (busy ? ' disabled' : '') + '><b>' + esc(m.name) + '</b><p>' + esc(m.description) + '</p>' +
+    '<span class="meta">' + (m.finalizes ? '<span class="chip warn">checks orders out</span>' : '<span class="chip">no checkouts</span>') + '<span class="go">Run</span></span></button>').join('');
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/modules', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+    $('err').hidden = true; render();
+  } catch (err) {
+    $('err').textContent = 'Could not load the module list (' + err.message + '). Is the runner server running? Retrying every 3 seconds. If this stays, hard-refresh the page (Ctrl+F5).'; $('err').hidden = false;
+  }
+}
+
+$('grid').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.mod'); if (!btn || btn.disabled) return;
+  const m = data.modules.find((x) => x.id === btn.dataset.id);
+  if (m.finalizes && !confirm('"' + m.name + '" really checks orders out. That finalizes orders, uses stock and leaves payments behind on the test dealer.\n\nRun it?')) return;
+  const tab = window.open('/', '_blank');     // opened on the click so the browser allows it
+  $('err').hidden = true;
+  let out;
+  try { out = await (await fetch('/api/run', { method: 'POST', body: JSON.stringify({ module: m.id }) })).json(); } catch (err) { out = { error: String(err) }; }
+  if (out.error) { if (tab) tab.close(); $('err').textContent = 'Could not start "' + m.name + '": ' + out.error; $('err').hidden = false; }
+  refresh();
+});
+$('stop').addEventListener('click', async () => { await fetch('/api/run-stop', { method: 'POST' }); setTimeout(refresh, 1500); });
+$('q').addEventListener('input', render);
+refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>

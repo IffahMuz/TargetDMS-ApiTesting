@@ -20,7 +20,9 @@ export default async function globalSetup() {
   fs.writeFileSync(specPath, JSON.stringify(await specRes.json()));
 
   let token = config.staticToken;
-  if (config.username && config.password) {
+  // REUSE_TOKEN=true (set by the module runner when the saved token is still valid): use API_TOKEN as it is and make no login call at all.
+  const reuse = process.env.REUSE_TOKEN === 'true' && !!token;
+  if (config.username && config.password && !reuse) {
     const doLogin = () => ctx.post('/api/v1/Auth/Login', {
       data: { dmsDealerId: config.dmsDealerId || undefined, userName: config.username, password: config.password },
     });

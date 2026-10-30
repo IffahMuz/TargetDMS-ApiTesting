@@ -9,6 +9,8 @@ const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
 const { root, workDir, loadEndpoints, endpointFor } = require('./lib');
+require('dotenv').config({ path: path.join(root, '.env') });
+const { MODULES } = require('./modules');
 const { adoConfig, buildBug, findExisting, createInAdo, deleteFromAdo } = require('./bug-report');
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? 9000);
@@ -68,7 +70,7 @@ function save() {
 // ---- events from the reporter ---------------------------------------------------------------------------------------
 function handle(ev) {
   if (ev.type === 'begin') {
-    state = { status: 'running', startedAt: new Date().toISOString(), finishedAt: null, label: '', tests: new Map() };
+    state = { status: 'running', startedAt: new Date().toISOString(), finishedAt: null, label: job && job.exit === null ? job.name : '', tests: new Map() };
     for (const t of ev.tests) state.tests.set(t.id, { ...t, status: 'queued', ms: 0, error: '', skipReason: '', exchanges: [], endpoints: [] });
     broadcast({ type: 'state', state: snapshot() });
   } else if (ev.type === 'start') {
@@ -122,8 +124,56 @@ function bugFor(id) {
   return buildBug(t, state, { index: all.indexOf(t) + 1, total: all.length, runFile, endpointInfo: (key) => eps.find((e) => e.key === key) });
 }
 
+// ---- names of saved runs ------------------------------------------------------------------------------------------------
+const runInfoCache = new Map();
+/** The module a saved run belongs to: the name stored with the run, or (older runs) the module whose files cover every test file of the run. */
+function moduleOfRun(run) {
+  if (run.label) return run.label;
+  const files = new Set([...(run.tests ?? [])].map((t) => t.file));
+  if (!files.size) return 'Empty run';
+  const inRun = (entry) => [...files].some((f) => ('tests/' + f) === entry || ('tests/' + f).startsWith(entry + '/'));
+  const covers = (m) => [...files].every((f) => m.files.some((e) => ('tests/' + f) === e || ('tests/' + f).startsWith(e + '/')));
+  const fit = MODULES.filter((m) => m.id !== 'all' && m.files.length && covers(m)).sort((a, b) => b.files.filter(inRun).length - a.files.filter(inRun).length || a.files.length - b.files.length)[0];
+  return fit ? fit.name : files.size > 8 ? 'Everything' : 'Custom run';
+}
+function runInfo(file) {
+  if (!runInfoCache.has(file)) {
+    let name = 'Run';
+    try { name = moduleOfRun(JSON.parse(fs.readFileSync(path.join(runsDir, file), 'utf8'))); } catch { /* unreadable */ }
+    const m = file.match(/^run-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/);
+    runInfoCache.set(file, { name, startedAt: m ? `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z` : '' });
+  }
+  return runInfoCache.get(file);
+}
+
+// ---- running modules from the runner page ------------------------------------------------------------------------------
+let job = null; // { module, child, startedAt, log: string[], exit: number|null }
+
+/** The saved token if it is still good for 10 more minutes, so a run needs no login call at all. */
+function savedToken() {
+  try {
+    const { token } = JSON.parse(fs.readFileSync(path.join(workDir, '.cache', 'token.json'), 'utf8'));
+    const exp = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString()).exp * 1000;
+    return exp - Date.now() > 10 * 60 * 1000 ? token : '';
+  } catch { return ''; }
+}
+
+function startRun(mod) {
+  const token = savedToken();
+  const env = { ...process.env, ...(mod.env ?? {}), ...(token ? { API_TOKEN: token, REUSE_TOKEN: 'true' } : {}) };
+  const args = ['playwright', 'test', ...mod.files, ...(mod.grep ? ['-g', mod.grep] : [])];
+  const child = spawn('npx', args, { cwd: root, env, shell: true });
+  job = { module: mod.id, name: mod.name, child, startedAt: new Date().toISOString(), log: [], exit: null, login: token ? 'reused the saved token (no login call)' : 'logs in once at the start' };
+  const keep = (b) => { job.log.push(...b.toString('utf8').split(/\r?\n/).filter(Boolean)); if (job.log.length > 200) job.log.splice(0, job.log.length - 200); };
+  child.stdout.on('data', keep); child.stderr.on('data', keep);
+  child.on('close', (code) => { job.exit = code ?? 1; });
+}
+
+const running = () => !!job && job.exit === null;
+const jobStatus = () => job && { module: job.module, name: job.name, startedAt: job.startedAt, running: running(), exit: job.exit, login: job.login, tail: job.log.slice(-8) };
+
 // ---- http -----------------------------------------------------------------------------------------------------------
-const json = (res, body, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+const json = (res, body, code = 200) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { const parts = []; req.on('data', (c) => parts.push(c)); req.on('end', () => resolve(Buffer.concat(parts).toString('utf8'))); });
 
 http.createServer(async (req, res) => {
@@ -135,6 +185,21 @@ http.createServer(async (req, res) => {
     res.write(`data: ${JSON.stringify({ type: 'state', state: snapshot() })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
+  } else if (url.pathname === '/runner') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(fs.readFileSync(path.join(__dirname, 'runner.html')));
+  } else if (url.pathname === '/api/modules') {
+    json(res, { modules: MODULES.map(({ id, name, description, files, finalizes }) => ({ id, name, description, files: files.length, finalizes: !!finalizes })), job: jobStatus() });
+  } else if (req.method === 'POST' && url.pathname === '/api/run') {
+    const { module: id } = JSON.parse((await readBody(req)) || '{}');
+    const mod = MODULES.find((m) => m.id === id);
+    if (!mod) return json(res, { error: 'Unknown module.' }, 404);
+    if (running() || state.status === 'running') return json(res, { error: 'A run is already in progress.', job: jobStatus() }, 409);
+    startRun(mod);
+    json(res, { ok: true, job: jobStatus() });
+  } else if (req.method === 'POST' && url.pathname === '/api/run-stop') {
+    if (running()) spawn('taskkill', ['/pid', String(job.child.pid), '/T', '/F'], { stdio: 'ignore' });
+    json(res, { ok: true });
   } else if (url.pathname === '/api/state') {
     json(res, snapshot());
   } else if (url.pathname === '/api/endpoints') {
@@ -144,7 +209,7 @@ http.createServer(async (req, res) => {
     t ? json(res, { error: t.error, skipReason: t.skipReason, exchanges: t.exchanges }) : json(res, { error: 'unknown test' }, 404);
   } else if (url.pathname === '/api/runs') {
     const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')).sort().reverse() : [];
-    json(res, files);
+    json(res, files.map((file) => ({ file, ...runInfo(file) })));
   } else if (req.method === 'POST' && url.pathname === '/api/load') {
     const file = path.basename(JSON.parse(await readBody(req)).file ?? '');
     if (state.status === 'running') return json(res, { error: 'A run is in progress.' }, 409);
@@ -173,7 +238,7 @@ http.createServer(async (req, res) => {
     json(res, out, out.error ? 400 : 200);
   } else if (url.pathname === '/bug') {
     // The page that shows one defect as it will be published and creates it on request.
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     res.end(fs.readFileSync(path.join(__dirname, 'bug.html')));
   } else if (req.method === 'POST' && url.pathname === '/api/bug-create') {
     // Creates the bugs the user confirmed. A test that already has an open bug is skipped unless `force` is set.
@@ -191,13 +256,14 @@ http.createServer(async (req, res) => {
     }
     json(res, { results });
   } else if (url.pathname === '/' || url.pathname === '/index.html') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     res.end(fs.readFileSync(path.join(__dirname, 'dashboard.html')));
   } else {
     res.writeHead(404); res.end('Not found');
   }
 }).listen(PORT, () => {
   const address = `http://localhost:${PORT}/`;
+  const open = address + 'runner';
   console.log(`Dashboard: ${address}\nNow run the suite in another terminal: npm test`);
-  if (!process.env.NO_OPEN && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', address], { detached: true, stdio: 'ignore' }).unref();
+  if (!process.env.NO_OPEN && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', open], { detached: true, stdio: 'ignore' }).unref();
 }).on('error', (err) => { console.error(err.code === 'EADDRINUSE' ? `Port ${PORT} is already in use (is the dashboard already running?)` : err); process.exit(1); });

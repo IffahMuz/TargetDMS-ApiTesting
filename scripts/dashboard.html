@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TargetDMS API Test Dashboard</title>
+<title>Integration Tests Live Runner</title>
 <style>
   :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mute:#5b6675; --line:#e2e6ec; --ok:#1a7f4b; --bad:#b42318; --warn:#a15c00; --info:#1d4ed8; --def:#7a3db8;
           --btn:#1d4ed8; --btnh:#1e40af; --btnb:#1d4ed8; --okbg:#e6f4ec; --badbg:#fdeceb; --warnbg:#fff4e0; --infobg:#e8effd; --defbg:#f1e8fb; --code:#f0f2f5; }
@@ -75,7 +75,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><h1>TargetDMS API Test Dashboard</h1><span id="state" class="state s-idle">WAITING FOR A RUN</span>
+  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state s-idle">WAITING FOR A RUN</span>
     <select id="runs" class="btn" title="Open a saved run"><option value="">Saved runs</option></select></div>
   <p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p>
   <div class="progress" id="progress"><i style="background:var(--ok)"></i><i style="background:var(--def)"></i><i style="background:var(--bad)"></i><i style="background:var(--warn)"></i></div>
@@ -132,7 +132,7 @@ function renderHeader() {
   st.className = 'state s-' + run.status;
   st.textContent = run.status === 'running' ? 'RUNNING' : run.status === 'finished' ? 'FINISHED' : 'WAITING FOR A RUN';
   $('sub').textContent = run.startedAt ? `Dealer ${run.dealer} - started ${new Date(run.startedAt).toLocaleTimeString()}` +
-    (run.status === 'finished' ? ` - took ${fmtDur(new Date(run.finishedAt) - new Date(run.startedAt))}` : ` - ${fmtDur(Date.now() - new Date(run.startedAt))} so far`) +
+    (run.status === 'finished' ? ` - ended ${new Date(run.finishedAt).toLocaleTimeString()} - took ${fmtDur(new Date(run.finishedAt) - new Date(run.startedAt))}` : ` - ${fmtDur(Date.now() - new Date(run.startedAt))} so far`) +
     ` - ${done} of ${total} tests done` : 'Start the suite with npm test; tests appear here as they run.';
   const cards = [[total, 'test cases', ''], [count('passed'), 'passed', 'c-ok'], [count('defect'), 'failed: known server defects', 'c-def'], [count('failed'), 'failed: unexpected', 'c-bad'],
     [count('skipped'), 'skipped', 'c-warn'], [count('queued') + count('running'), 'still to finish', 'c-info']];
@@ -292,8 +292,10 @@ source.onmessage = (m) => {
 setInterval(() => { if (run.status === 'running') renderHeader(); }, 1000);
 
 async function loadRuns() {
-  const files = await (await fetch('/api/runs')).json();
-  $('runs').replaceChildren(new Option('Saved runs', ''), ...files.map((f) => new Option(f.replace(/^run-|\.json$/g, ''), f)));
+  const runs = await (await fetch('/api/runs')).json();
+  // Module name - date - time - day, e.g. "Login and tokens - 30 Oct 2026 - 9:23 pm - Friday"
+  const nice = (r) => { const d = new Date(r.startedAt); return isNaN(d) ? r.file : [r.name, d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase(), d.toLocaleDateString('en-US', { weekday: 'long' })].join(' - '); };
+  $('runs').replaceChildren(new Option('Saved runs', ''), ...runs.map((r) => new Option(nice(r), r.file)));
 }
 $('runs').addEventListener('change', async () => {
   if (!$('runs').value) return;
