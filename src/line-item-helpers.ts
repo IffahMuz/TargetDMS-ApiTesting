@@ -9,14 +9,27 @@ const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 const now = () => new Date().toISOString().slice(0, 19);
 const q = '?orderSource=TargetDMSWeb';
 
+/** First row of a list endpoint. A refused or failed call (rate limit, 5xx, dropped connection) is tried again a few times, then reported with what the API said, instead of "cannot read properties of null". */
+async function firstRow(request: APIRequestContext, url: string, what: string): Promise<any> {
+  let last = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await request.get(url, { headers, timeout: config.timeoutMs });
+      const body = await json(res);
+      if (Array.isArray(body?.data) && body.data.length) return body.data[0];
+      last = `HTTP ${res.status()} ${JSON.stringify(body).slice(0, 200)}`;
+    } catch (err) { last = String(err).split(/\r?\n/)[0]; }
+    await new Promise((r) => setTimeout(r, 3000 * attempt));
+  }
+  throw new Error(`${what}: no first row after 3 tries (${last})`);
+}
+
 export async function firstJobCode(request: APIRequestContext): Promise<{ jobCode: string; description: string }> {
-  const res = await json(await request.get(`/api/v1/Dealer/JobCodes?DealerGuid=${guid}&PageNumber=1&PageSize=1`, { headers, timeout: config.timeoutMs }));
-  return res.data[0];
+  return firstRow(request, `/api/v1/Dealer/JobCodes?DealerGuid=${guid}&PageNumber=1&PageSize=1`, 'Dealer/JobCodes');
 }
 
 export async function firstMiscItem(request: APIRequestContext): Promise<{ description: string; moreInfo: string }> {
-  const res = await json(await request.get(`/api/v1/Inventory/Miscellaneous/${guid}?PageNumber=1&PageSize=1`, { headers, timeout: config.timeoutMs }));
-  return res.data[0];
+  return firstRow(request, `/api/v1/Inventory/Miscellaneous/${guid}?PageNumber=1&PageSize=1`, 'Inventory/Miscellaneous');
 }
 
 export const laborBody = (wo: WorkOrder, code: { jobCode: string; description: string }, over: Record<string, unknown> = {}) => ({

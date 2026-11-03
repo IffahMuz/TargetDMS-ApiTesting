@@ -87,6 +87,7 @@ The API allows 100 requests per 3 minutes per user and 150 per IP. The suite thr
 | Payment deposits (cash, $10) | `payment-deposit*.spec.ts` (split deposits, negatives, checkout with deposits and overpay) |
 | Warranty | `tests/flows/warranty*` |
 | Inventory, purchase orders, time clock, receipts, notifications, dealer, user | `tests/flows`, `tests/post` |
+| Change events, dealer settings, email | `tests/post/other-endpoints.spec.ts` (ChangeRelay TestEvent; bad input to the dealer configuration save and RegisterEmail; login validation). A valid configuration save and a valid RegisterEmail are left out on purpose. |
 | Known server defects | `tests/defects/server-defects.spec.ts` |
 
 The module list of the runner is `scripts/modules.js` (each module names its test files, an optional title filter and any switches it needs). Add new test files there so they appear on the runner page. The runner starts Playwright itself without a shell, so a title filter such as `Deposit|PAY-DEF` is passed on unchanged.

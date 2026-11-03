@@ -19,6 +19,7 @@ const MODULES = [
   { id: 'purchase', name: 'Purchase orders and time clock', description: 'Purchase order receive flow and technician clock in/out on work orders.', files: [T + 'flows/purchase-order.flow.spec.ts', T + 'flows/time-clock.flow.spec.ts'] },
   { id: 'receipts', name: 'Receipts and notifications', description: 'Receipt links and receipts, plus the notification and transaction POST checks.', files: [T + 'flows/receipt.flow.spec.ts', T + 'post/notification.post.spec.ts', T + 'post/transaction.post.spec.ts'] },
   { id: 'dealer-user', name: 'Dealer and user', description: 'Dealer, job code and user POST checks.', files: [T + 'post/dealer.post.spec.ts', T + 'post/user.post.spec.ts'] },
+  { id: 'other-endpoints', name: 'Change events, dealer settings and email', description: 'ChangeRelay test events, bad input to the dealer configuration save and RegisterEmail, and login validation. Sends two live change notifications; saves no setting and sends no mail.', files: [T + 'post/other-endpoints.spec.ts'], env: { SINGLE_LOGIN: 'false' } },
   { id: 'defects', name: 'Known server defects', description: 'Every known-defect test (purple when they still fail). Creates and cleans up a few orders.', files: [T + 'defects'] },
 ];
 module.exports = { MODULES };
