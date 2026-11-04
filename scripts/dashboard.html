@@ -74,6 +74,13 @@
   /* narrow screens: the result, title and timing stack, but the ADO button stays on the same line, at the right of the row */
   @media (max-width:760px) { .row > summary, .erow > summary { grid-template-columns:minmax(0,1fr) auto; } .row > summary > :not(.btn) { grid-column:1; } .row > summary > .btn.ado { grid-column:2; grid-row:1 / span 4; align-self:center; } .cols { grid-template-columns:1fr; } }
   .modname { color:var(--mute); font-weight:600; }
+  .plainrow { display:grid; grid-template-columns:110px minmax(0,1fr) 260px; gap:10px; align-items:center; padding:8px 12px; }
+  @media (max-width:760px) { .plainrow { grid-template-columns:minmax(0,1fr); } }
+  .modrow { display:grid; grid-template-columns:minmax(180px,1.2fr) minmax(120px,2fr) 150px 50px; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-bottom:6px; color:var(--ink); text-decoration:none; }
+  .modrow:hover { background:var(--infobg); }
+  .modbar { height:8px; background:var(--line); border-radius:6px; overflow:hidden; } .modbar i { display:block; height:100%; background:var(--ok); }
+  #covmods { margin-bottom:14px; } #covmods .head { margin-top:6px; }
+  @media (max-width:760px) { .modrow { grid-template-columns:1fr auto; } .modbar { grid-column:1 / span 2; } }
   .msg { margin:6px 0 10px; padding:8px 12px; border-radius:8px; background:var(--infobg); color:var(--info); white-space:pre-wrap; word-break:break-word; }
   .msg.bad { background:var(--badbg); color:var(--bad); }
   .runbtn { background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:9px 26px; font:inherit; font-weight:700; cursor:pointer; }
@@ -91,7 +98,7 @@
   <div class="cards" id="cards"></div>
   <div class="now" id="now" hidden></div>
 
-  <div class="tabs"><button class="tab on" data-tab="tc">Test cases</button><button class="tab" data-tab="ep">Endpoints</button></div>
+  <div class="tabs"><button class="tab on" data-tab="tc">Test cases</button><button class="tab" data-tab="cov" id="covtab" hidden>Coverage</button><button class="tab" data-tab="ep">Endpoints</button></div>
 
   <section id="tc">
     <div class="bar">
@@ -101,6 +108,17 @@
       <span class="count" id="tcc"></span>
     </div>
     <div id="tclist"></div>
+  </section>
+
+  <section id="cov" hidden>
+    <div class="cards" id="covcards"></div>
+    <div class="bar">
+      <input id="covq" type="search" placeholder="Search endpoint, tag or description">
+      <select id="covf"><option value="">All endpoints of this module</option><option value="covered">Covered</option><option value="not">Not covered yet</option></select>
+      <span class="count" id="covc"></span>
+    </div>
+    <div id="covmods" hidden></div>
+    <div id="covlist"></div>
   </section>
 
   <section id="ep" hidden>
@@ -259,12 +277,12 @@ async function renderEndpoints() {
     const d = el('details', 'row erow');
     d.appendChild(el('summary', '', null, [method(e.method), el('span', 'path', e.path, [e.summary ? el('small', '', e.summary) : null]),
       el('span', 'pill ' + (e.automated ? 'p-auto' : 'p-no'), e.automated ? 'AUTOMATED' : 'NOT AUTOMATED'),
-      el('span', 'nums', null, e.automated ? [el('b', 'n-pass', e.passed + ' pass'), document.createTextNode(' / '), el('b', 'n-def', e.defect + ' known defect'), document.createTextNode(' / '), el('b', 'n-fail', e.failed + ' fail'), document.createTextNode(' / '), el('b', 'n-skip', e.skipped + ' skip')] : [])]));
+      el('span', 'nums', null, e.automated && !e.tests.length ? [document.createTextNode('not run yet')] : e.automated ? [el('b', 'n-pass', e.passed + ' pass'), document.createTextNode(' / '), el('b', 'n-def', e.defect + ' known defect'), document.createTextNode(' / '), el('b', 'n-fail', e.failed + ' fail'), document.createTextNode(' / '), el('b', 'n-skip', e.skipped + ' skip')] : [])]));
     d.addEventListener('toggle', () => {
       if (!d.open || d.dataset.done) return;
       d.dataset.done = 1;
       const b = el('div', 'body');
-      if (!e.automated) b.appendChild(el('div', 'note', e.note));
+      if (!e.automated || !e.tests.length) b.appendChild(el('div', 'note', e.note));
       else {
         b.appendChild(el('div', 'gname', 'Scenarios that send a request to this endpoint:'));
         e.tests.sort((a, c) => ORDER.indexOf(a.status) - ORDER.indexOf(c.status)).forEach((t) => {
@@ -280,14 +298,87 @@ async function renderEndpoints() {
   });
 }
 
+// ---- coverage of the module on this page ----
+// The endpoints this module's own tests send requests to, out of every endpoint in the API. Shown only on a module page.
+async function renderCoverage() {
+  if (!modId) return;
+  const C = await (await fetch('/api/module-coverage?module=' + encodeURIComponent(modId))).json();
+  if (C.error) { $('covlist').replaceChildren(el('div', 'empty', C.error)); return; }
+  // "Everything" is calculated from its modules (their covered and total endpoints added up); a single module from its own endpoints.
+  const A = C.across;
+  const covered = A ? A.covered : C.covered, total = A ? A.total : C.total;
+  const pct = total ? Math.round((covered / total) * 100) : 0;
+  const cards = A
+    ? [[covered, 'module endpoints covered, added up over all modules', 'c-ok'], [total - covered, 'module endpoints not covered', 'c-bad'], [total, 'module endpoints in total (one used by several modules counts in each)', ''],
+       [pct + '%', 'coverage of Everything, from its modules (' + A.uniqueCovered + ' of the ' + A.uniqueTotal + ' API endpoints are used by at least one module)', 'c-info']]
+    : [[covered, 'of this module\'s endpoints are covered', 'c-ok'], [total - covered, 'of this module\'s endpoints are not covered', 'c-bad'], [total, 'endpoints belong to this module', ''],
+       [pct + '%', 'coverage of this module' + (C.extra ? ' (its tests also use ' + C.extra + ' other endpoints)' : ''), 'c-info']];
+  $('covcards').replaceChildren(...cards.map(([n, l, c]) => el('div', 'card ' + c, null, [el('b', '', n), el('span', '', l)])));
+  // "Everything" also shows the coverage of each module; a row opens that module's page.
+  $('covmods').hidden = !C.modules;
+  if (C.modules) {
+    $('covmods').replaceChildren(el('div', 'head', 'Coverage by module'), ...C.modules.map((m) => {
+      const p = m.total ? Math.round((m.covered / m.total) * 100) : 0;
+      const bar = el('div', 'modbar', null, [el('i')]); bar.firstChild.style.width = p + '%';
+      const r = el('a', 'modrow', null, [el('span', 'modname2', m.name), bar, el('span', 'nums', m.covered + ' of ' + m.total + ' endpoints'), el('b', p === 100 ? 'n-pass' : p >= 50 ? 'n-skip' : 'n-fail', p + '%')]);
+      r.href = '/?module=' + encodeURIComponent(m.id) + '&tab=coverage'; r.target = '_blank';
+      return r;
+    }));
+  }
+  const q = $('covq').value.toLowerCase(), f = $('covf').value;
+  const list = C.endpoints.filter((e) => (!f || (f === 'covered' && e.covered) || (f === 'not' && !e.covered)) && (!q || (e.path + ' ' + e.tag + ' ' + e.summary + ' ' + e.method).toLowerCase().includes(q)));
+  $('covc').textContent = list.length + ' of ' + C.total + ' endpoints';
+  const box = $('covlist'); box.replaceChildren();
+  if (!list.length) box.appendChild(el('div', 'empty', 'No endpoints match.'));
+  let last = '';
+  list.forEach((e) => {
+    if (e.tag !== last) { last = e.tag; const g = C.endpoints.filter((x) => x.tag === e.tag); box.appendChild(el('div', 'head', `${e.tag}  (${g.filter((x) => x.covered).length}/${g.length} covered)`)); }
+    const d = el('details', 'row erow');
+    const ran = e.tests.length > 0;
+    d.appendChild(el('summary', '', null, [method(e.method), el('span', 'path', e.path, [e.summary ? el('small', '', e.summary) : null]),
+      el('span', 'pill ' + (e.covered ? 'p-auto' : 'p-no'), e.covered ? 'COVERED' : 'NOT COVERED'),
+      el('span', 'nums', null, !e.covered ? [] : !ran ? [document.createTextNode('not run yet')] :
+        [el('b', 'n-pass', e.passed + ' pass'), document.createTextNode(' / '), el('b', 'n-def', e.defect + ' known defect'), document.createTextNode(' / '), el('b', 'n-fail', e.failed + ' fail'), document.createTextNode(' / '), el('b', 'n-skip', e.skipped + ' skip')])]));
+    d.addEventListener('toggle', () => {
+      if (!d.open || d.dataset.done) return;
+      d.dataset.done = 1;
+      const b = el('div', 'body');
+      if (!e.covered) b.appendChild(el('div', 'note', 'No test of this module sends a request to this endpoint.'));
+      else {
+        b.appendChild(el('div', 'gname', 'Tests of this module that send a request to this endpoint' + (ran ? '' : ' (not run yet):')));
+        const norm = (g) => (g || '').replace(/ › /g, ' > ');
+        // each test with its result on this page: waiting tests are plain rows, tests that have run open to show their requests
+        const rows = e.known.map((k) => {
+          const full = [...tests.values()].find((t) => t.file === k.file && t.title === k.title && norm(t.group) === norm(k.group));
+          return { k, full };
+        }).sort((a, c) => ORDER.indexOf(a.full ? a.full.status : 'queued') - ORDER.indexOf(c.full ? c.full.status : 'queued'));
+        rows.forEach(({ k, full }) => {
+          if (full && full.status !== 'queued' && full.status !== 'running') {
+            const r = testRow(full, e.key);
+            if (full.status === 'failed' || full.status === 'defect') r.open = true;
+            b.appendChild(r);
+          } else {
+            b.appendChild(el('div', 'row plainrow', null, [pill(full ? full.status : 'queued'), el('span', '', k.title), el('span', 'gname', k.group || k.file)]));
+          }
+        });
+        if (!rows.length) b.appendChild(el('div', 'note', 'No test is known for this endpoint yet.'));
+      }
+      d.appendChild(b);
+    });
+    box.appendChild(d);
+  });
+}
+
 // ---- wiring ----
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
-  $('tc').hidden = b.dataset.tab !== 'tc'; $('ep').hidden = b.dataset.tab !== 'ep';
+  $('tc').hidden = b.dataset.tab !== 'tc'; $('cov').hidden = b.dataset.tab !== 'cov'; $('ep').hidden = b.dataset.tab !== 'ep';
   if (b.dataset.tab === 'ep') renderEndpoints();
+  if (b.dataset.tab === 'cov') renderCoverage();
 }));
 ['tcq', 'tcf'].forEach((id) => $(id).addEventListener('input', renderTests));
 ['epq', 'epf'].forEach((id) => $(id).addEventListener('input', renderEndpoints));
+['covq', 'covf'].forEach((id) => $(id).addEventListener('input', renderCoverage));
 $('tcx').addEventListener('click', () => document.querySelectorAll('#tclist > details').forEach((d) => { if (/FAILED|KNOWN DEFECT/.test(d.querySelector('summary').innerText)) d.open = true; }));
 $('tcz').addEventListener('click', () => document.querySelectorAll('#tclist details[open]').forEach((d) => (d.open = false)));
 
@@ -298,6 +389,7 @@ function applyState(s) {
   openIds.clear();
   renderHeader(); renderTests();
   if (!$('ep').hidden) renderEndpoints();
+  if (!$('cov').hidden) renderCoverage();
 }
 
 // Test events can arrive in bursts; redraw at most a few times a second.
@@ -362,7 +454,9 @@ async function initModule() {
   showPlanned();
   const info = await (await fetch('/api/modules', { cache: 'no-store' })).json();
   modInfo = info.modules.find((m) => m.id === modId);
-  $('gorun').hidden = false; $('goreset').hidden = false; $('modname').hidden = false;
+  $('gorun').hidden = false; $('goreset').hidden = false; $('modname').hidden = false; $('covtab').hidden = !modInfo;
+  // Opened from a row of "Coverage by module": start on the Coverage tab.
+  if (modInfo && new URLSearchParams(location.search).get('tab') === 'coverage') $('covtab').click();
   if (!modInfo) { $('modname').textContent = 'Unknown module'; $('gorun').disabled = true; say('There is no module "' + modId + '". Go back to the runner page and choose one.', true); return; }
   document.title = modInfo.name + ' - Integration Tests Live Runner';
   $('modname').textContent = modInfo.name; $('modname').title = modInfo.description; $('gorun').title = 'Run: ' + modInfo.name;

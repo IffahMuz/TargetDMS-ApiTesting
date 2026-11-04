@@ -18,6 +18,7 @@ const runsDir = path.join(workDir, 'runs');
 const specFile = path.join(workDir, '.cache', 'spec.json');
 const notesFile = path.join(root, 'testdata', 'endpoint-notes.json');
 const BODY_LIMIT = 8000;
+const RUN_HISTORY_DAYS = Number(process.env.RUN_HISTORY_DAYS ?? 7);
 
 let state = { status: 'idle', startedAt: null, finishedAt: null, label: '', tests: new Map() };
 const clients = new Set();
@@ -58,6 +59,7 @@ function save() {
   fs.mkdirSync(runsDir, { recursive: true });
   const name = `run-${state.startedAt.replace(/[:.]/g, '-')}.json`;
   fs.writeFileSync(path.join(runsDir, name), JSON.stringify({ ...snapshot(), tests: [...state.tests.values()] }));
+  if (savedIndex) state.tests.forEach(indexTest);
 }
 
 // ---- events from the reporter ---------------------------------------------------------------------------------------
@@ -92,16 +94,122 @@ function handle(ev) {
 }
 
 // ---- endpoint coverage ----------------------------------------------------------------------------------------------
-function coverage() {
-  const notes = fs.existsSync(notesFile) ? JSON.parse(fs.readFileSync(notesFile, 'utf8')) : {};
-  return endpoints().map((e) => {
+/**
+ * Endpoints that any saved run has sent a request to, so "automated" does not depend on what the page shows right now.
+ * Read once from every saved run on disk (not only the last week) and kept up to date when a run is saved.
+ */
+let savedIndex = null; // "file|group|title" -> { file, group, title, endpoints: Set } for every test seen in a saved run
+function indexTest(t) {
+  if (!t.endpoints?.length) return;
+  const key = `${t.file}|${t.group}|${t.title}`;
+  const entry = savedIndex.get(key) ?? { file: t.file, group: t.group ?? '', title: t.title, endpoints: new Set() };
+  t.endpoints.forEach((k) => entry.endpoints.add(k));
+  savedIndex.set(key, entry);
+}
+function savedTests() {
+  if (savedIndex) return savedIndex;
+  savedIndex = new Map();
+  const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')) : [];
+  for (const file of files) {
+    try { (JSON.parse(fs.readFileSync(path.join(runsDir, file), 'utf8')).tests ?? []).forEach(indexTest); } catch { /* unreadable run file */ }
+  }
+  return savedIndex;
+}
+function savedEndpoints() {
+  const all = new Set();
+  savedTests().forEach((t) => t.endpoints.forEach((k) => all.add(k)));
+  return all;
+}
+
+/** Endpoints named in the title of a test that exists (the generic Swagger tests and the explicit GET/POST checks are titled "... GET /api/v1/..."), even if it has never run. */
+const endpointOfTitle = (title) => title.match(/(?:^| - )((?:GET|POST|PUT|DELETE|PATCH) \/\S+)$/)?.[1];
+const titleEndpoints = (rows) => {
+  const found = new Set();
+  for (const r of rows) { const k = endpointOfTitle(r.title); if (k) found.add(k); }
+  return found;
+};
+let plannedCoverage = null;
+async function plannedEndpoints() {
+  if (plannedCoverage) return plannedCoverage;
+  const found = titleEndpoints(await listModule(MODULES.find((m) => m.id === 'all')));
+  if (found.size) plannedCoverage = found;
+  return found;
+}
+
+/**
+ * The endpoints one runner module covers: those its own test files sent a request to in any saved run or in the run on the page,
+ * plus those named in the titles of the module's tests. Nothing has to run for the planned part.
+ */
+async function moduleCoverage(mod, withModules = false) {
+  const inModule = (t) => !mod.files.length || mod.files.some((f) => ('tests/' + t.file) === f || ('tests/' + t.file).startsWith(f + '/'));
+  const matches = (t) => !mod.grep || new RegExp(mod.grep).test(`${t.group ?? ''} ${t.title}`);
+  // The tests that exist now (Playwright's own list). A test seen in a saved run only counts while it still exists, so removed tests drop out.
+  const listed = await listModule(mod);
+  const norm = (g) => (g ?? '').replace(/ › /g, ' > ');
+  const keyOf = (t) => `${t.file}|${norm(t.group)}|${t.title}`;
+  const listedKeys = new Set(listed.map(keyOf));
+  const known = new Map(); // endpoint -> Map(test key -> { title, group, file }): the tests of this module that send a request to it
+  const add = (endpoint, t) => {
+    if (!known.has(endpoint)) known.set(endpoint, new Map());
+    known.get(endpoint).set(keyOf(t), { title: t.title, group: norm(t.group), file: t.file });
+  };
+  const usable = (t) => inModule(t) && matches(t) && (!listedKeys.size || listedKeys.has(keyOf(t)));
+  savedTests().forEach((t) => { if (usable(t)) t.endpoints.forEach((k) => add(k, t)); });
+  state.tests.forEach((t) => { if (t.endpoints?.length && usable(t)) t.endpoints.forEach((k) => add(k, t)); });
+  listed.forEach((r) => { const k = endpointOfTitle(r.title); if (k) add(k, r); });
+  const row = (e) => {
     const linked = [...state.tests.values()].filter((t) => t.endpoints.includes(e.key));
     const count = (s) => linked.filter((t) => t.status === s).length;
     return {
-      key: e.key, method: e.method, path: e.path, tag: e.tag, summary: e.summary, automated: linked.length > 0,
+      key: e.key, method: e.method, path: e.path, tag: e.tag, summary: e.summary, covered: known.has(e.key),
       passed: count('passed'), failed: count('failed'), defect: count('defect'), skipped: count('skipped'),
       tests: linked.map((t) => ({ id: t.id, title: t.title, status: t.status })),
-      note: linked.length ? '' : notes[e.key] ?? 'No test sends a request to this endpoint.',
+      known: [...(known.get(e.key)?.values() ?? [])],
+    };
+  };
+  const everything = endpoints().map(row);
+  const mine = everything.filter((e) => inScope(mod.scope, e));
+  // `extra`: endpoints the module's tests also send requests to that are outside its own area (shown as a number only).
+  const out = { module: { id: mod.id, name: mod.name }, total: mine.length, covered: mine.filter((e) => e.covered).length, extra: everything.filter((e) => e.covered && !mine.includes(e)).length, endpoints: mine };
+  // "Everything" also reports the coverage of each module on its own (one after the other: each one lists its tests with a Playwright process).
+  if (withModules && mod.id === 'all') {
+    out.modules = [];
+    for (const m of MODULES) {
+      if (m.id === 'all') continue;
+      const c = await moduleCoverage(m);
+      out.modules.push({ id: m.id, name: m.name, total: c.total, covered: c.covered });
+    }
+    // The coverage of Everything is made from its modules: every module's covered endpoints over every module's endpoints.
+    // (An endpoint that several modules use counts once in each of them. `unique*` is the plain count of API endpoints that at least one module covers.)
+    out.across = { covered: out.modules.reduce((n, m) => n + m.covered, 0), total: out.modules.reduce((n, m) => n + m.total, 0), uniqueCovered: out.covered, uniqueTotal: out.total };
+  }
+  return out;
+}
+
+/** Whether an endpoint belongs to a module's area. Patterns are "[METHOD ]/path-prefix" (trailing $ = exactly that path), "*" or "GET *"; see scripts/modules.js. */
+function inScope(scope, e) {
+  const p = e.path.replace(/^\/api\/v\d+/i, '');
+  return (scope ?? ['*']).some((pattern) => {
+    const [, verb, rest] = pattern.match(/^(?:(GET|POST|PUT|DELETE|PATCH) )?(.+)$/);
+    if (verb && verb !== e.method) return false;
+    if (rest === '*') return true;
+    return rest.endsWith('$') ? p === rest.slice(0, -1) : p.startsWith(rest);
+  });
+}
+
+async function coverage() {
+  const notes = fs.existsSync(notesFile) ? JSON.parse(fs.readFileSync(notesFile, 'utf8')) : {};
+  const saved = savedEndpoints();
+  const planned = await plannedEndpoints();
+  return endpoints().map((e) => {
+    const linked = [...state.tests.values()].filter((t) => t.endpoints.includes(e.key));
+    const count = (s) => linked.filter((t) => t.status === s).length;
+    const automated = linked.length > 0 || saved.has(e.key) || planned.has(e.key);
+    return {
+      key: e.key, method: e.method, path: e.path, tag: e.tag, summary: e.summary, automated,
+      passed: count('passed'), failed: count('failed'), defect: count('defect'), skipped: count('skipped'),
+      tests: linked.map((t) => ({ id: t.id, title: t.title, status: t.status })),
+      note: linked.length ? '' : automated ? 'Automated: a test sends a request to this endpoint, but none of the tests on this page has run yet.' : notes[e.key] ?? 'No test sends a request to this endpoint.',
     };
   });
 }
@@ -258,14 +366,19 @@ http.createServer(async (req, res) => {
     json(res, { ok: true });
   } else if (url.pathname === '/api/state') {
     json(res, snapshot());
+  } else if (url.pathname === '/api/module-coverage') {
+    const mod = MODULES.find((m) => m.id === url.searchParams.get('module'));
+    mod ? json(res, await moduleCoverage(mod, true)) : json(res, { error: 'Unknown module.' }, 404);
   } else if (url.pathname === '/api/endpoints') {
-    json(res, coverage());
+    json(res, await coverage());
   } else if (url.pathname.startsWith('/api/test/')) {
     const t = state.tests.get(decodeURIComponent(url.pathname.slice('/api/test/'.length)));
     t ? json(res, { error: t.error, skipReason: t.skipReason, exchanges: t.exchanges }) : json(res, { error: 'unknown test' }, 404);
   } else if (url.pathname === '/api/runs') {
     const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')).sort().reverse() : [];
-    json(res, files.map((file) => ({ file, ...runInfo(file) })));
+    // Only the last week is listed; older run files stay on disk but are not offered.
+    const since = Date.now() - RUN_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+    json(res, files.map((file) => ({ file, ...runInfo(file) })).filter((r) => !r.startedAt || new Date(r.startedAt).getTime() >= since));
   } else if (req.method === 'POST' && url.pathname === '/api/load') {
     const file = path.basename(JSON.parse(await readBody(req)).file ?? '');
     if (state.status === 'running') return json(res, { error: 'A run is in progress.' }, 409);
@@ -322,4 +435,6 @@ http.createServer(async (req, res) => {
   const open = address + 'runner';
   console.log(`Dashboard: ${address}\nNow run the suite in another terminal: npm test`);
   if (!process.env.NO_OPEN && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', open], { detached: true, stdio: 'ignore' }).unref();
+  // List every module's tests once in the background, so the first Coverage tab of "Everything" does not have to wait for all of them.
+  (async () => { for (const m of MODULES) await listModule(m).catch(() => []); })();
 }).on('error', (err) => { console.error(err.code === 'EADDRINUSE' ? `Port ${PORT} is already in use (is the dashboard already running?)` : err); process.exit(1); });
