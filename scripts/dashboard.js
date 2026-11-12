@@ -434,7 +434,8 @@ http.createServer(async (req, res) => {
   const address = `http://localhost:${PORT}/`;
   const open = address + 'runner';
   console.log(`Dashboard: ${address}\nNow run the suite in another terminal: npm test`);
-  if (!process.env.NO_OPEN && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', open], { detached: true, stdio: 'ignore' }).unref();
+  // Opens one runner page, in Microsoft Edge (set NO_OPEN=1 to open none).
+  if (!process.env.NO_OPEN && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', 'msedge', open], { detached: true, stdio: 'ignore' }).unref();
   // List every module's tests once in the background, so the first Coverage tab of "Everything" does not have to wait for all of them.
   (async () => { for (const m of MODULES) await listModule(m).catch(() => []); })();
 }).on('error', (err) => { console.error(err.code === 'EADDRINUSE' ? `Port ${PORT} is already in use (is the dashboard already running?)` : err); process.exit(1); });
