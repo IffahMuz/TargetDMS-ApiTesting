@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import { request } from '@playwright/test';
 import { cacheDir, config, specPath, tokenPath } from './config';
 
@@ -40,5 +41,7 @@ export default async function globalSetup() {
   if (!token) throw new Error('No credentials: set API_USERNAME/API_PASSWORD or API_TOKEN in .env');
 
   fs.writeFileSync(tokenPath, JSON.stringify({ token }));
+  // A new run may log in again once if its token stops working part way (see src/fixtures.ts); forget the last run's attempts.
+  fs.rmSync(path.join(cacheDir, 'relogin.json'), { force: true });
   await ctx.dispose();
 }
