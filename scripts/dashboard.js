@@ -12,6 +12,7 @@ const { root, workDir, loadEndpoints, endpointFor } = require('./lib');
 require('dotenv').config({ path: path.join(root, '.env') });
 const { MODULES } = require('./modules');
 const { adoConfig, buildBug, findExisting, createInAdo, deleteFromAdo } = require('./bug-report');
+const report = require('./report');
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? 9000);
 const runsDir = path.join(workDir, 'runs');
@@ -247,6 +248,37 @@ function runInfo(file) {
   return runInfoCache.get(file);
 }
 
+// ---- report analysis (compare two saved runs) -----------------------------------------------------------------------------
+const recentRunFiles = () => {
+  const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')).sort().reverse() : [];
+  const since = Date.now() - RUN_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+  return files.filter((f) => { const s = runInfo(f).startedAt; return !s || new Date(s).getTime() >= since; });
+};
+const runSummaryCache = new Map();
+/** Name, times and counts of a saved run, for the Report analysis pickers (run files do not change once saved). */
+function runSummary(file) {
+  if (!runSummaryCache.has(file)) {
+    try {
+      const run = JSON.parse(fs.readFileSync(path.join(runsDir, file), 'utf8'));
+      const c = report.counts(run.tests ?? []);
+      runSummaryCache.set(file, { file, name: runInfo(file).name, startedAt: run.startedAt ?? runInfo(file).startedAt, finishedAt: run.finishedAt ?? null, status: run.status, total: (run.tests ?? []).length, ...c, rate: report.passRate(c) });
+    } catch { return { file, name: runInfo(file).name, startedAt: runInfo(file).startedAt, unreadable: true }; }
+  }
+  return runSummaryCache.get(file);
+}
+/** The comparison of two saved runs from the last week, or an error a person can act on. */
+function comparison(a, b) {
+  const recent = new Set(recentRunFiles());
+  const fa = path.basename(a ?? ''), fb = path.basename(b ?? '');
+  if (!fa || !fb) return { error: 'Choose two saved runs.' };
+  if (fa === fb) return { error: 'Choose two different runs.' };
+  if (!recent.has(fa) || !recent.has(fb)) return { error: `Only runs from the last ${RUN_HISTORY_DAYS} days can be compared.` };
+  const na = runInfo(fa).name, nb = runInfo(fb).name;
+  if (na !== nb) return { error: `Both runs must be of the same module ("${na}" and "${nb}" differ).` };
+  const load = (f) => ({ file: f, name: runInfo(f).name, run: JSON.parse(fs.readFileSync(path.join(runsDir, f), 'utf8')) });
+  return { result: report.compareRuns(load(fa), load(fb), MODULES) };
+}
+
 // ---- the tests of a module, listed without running them -------------------------------------------------------------------
 const listCache = new Map();
 /** The tests a module would run (Playwright's own --list, so nothing is sent to the API), as dashboard rows that have not run yet. */
@@ -379,6 +411,24 @@ http.createServer(async (req, res) => {
     // Only the last week is listed; older run files stay on disk but are not offered.
     const since = Date.now() - RUN_HISTORY_DAYS * 24 * 60 * 60 * 1000;
     json(res, files.map((file) => ({ file, ...runInfo(file) })).filter((r) => !r.startedAt || new Date(r.startedAt).getTime() >= since));
+  } else if (url.pathname === '/report') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(fs.readFileSync(path.join(__dirname, 'report.html')));
+  } else if (url.pathname === '/api/report-runs') {
+    json(res, { days: RUN_HISTORY_DAYS, runs: recentRunFiles().map(runSummary).filter((r) => !r.unreadable && r.total) });
+  } else if (url.pathname === '/api/report') {
+    const { result, error } = comparison(url.searchParams.get('a'), url.searchParams.get('b'));
+    error ? json(res, { error }, 400) : json(res, { css: report.CSS, html: report.renderReport(result), run1: result.run1, run2: result.run2 });
+  } else if (url.pathname === '/api/report.pdf') {
+    const { result, error } = comparison(url.searchParams.get('a'), url.searchParams.get('b'));
+    if (error) return json(res, { error }, 400);
+    try {
+      const pdf = await report.htmlToPdf(report.printPage(result));
+      const day = (iso) => (iso ?? '').slice(0, 10);
+      const name = `run-comparison-${result.run2.name.replace(/[^\w-]+/g, '-')}-${day(result.run1.startedAt)}-vs-${day(result.run2.startedAt)}.pdf`;
+      res.writeHead(200, { 'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' });
+      res.end(pdf);
+    } catch (err) { json(res, { error: String(err.message ?? err) }, 500); }
   } else if (req.method === 'POST' && url.pathname === '/api/load') {
     const file = path.basename(JSON.parse(await readBody(req)).file ?? '');
     if (state.status === 'running') return json(res, { error: 'A run is in progress.' }, 409);

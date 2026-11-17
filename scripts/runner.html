@@ -36,11 +36,13 @@
   .chip.warn { background:var(--warnbg); color:var(--warn); }
   .go { margin-left:auto; background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:4px 14px; font-weight:700; }
   .mod:hover:not(:disabled) .go { background:var(--btnh); }
+  .report { margin-left:auto; background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:7px 16px; font-weight:700; text-decoration:none; }
+  .report:hover { background:var(--btnh); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state">READY</span></div>
+  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state">READY</span><a class="report" href="/report" target="_blank">Report analysis</a></div>
   <p class="sub">Choose a module. The live dashboard opens in a new tab with a Run button; the run starts when you click it.</p>
   <div id="err" class="err" hidden></div>
   <div id="now" class="now" hidden>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report analysis - Integration Tests Live Runner</title>
+<style id="base">
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mute:#5b6675; --line:#e2e6ec; --bad:#b42318; --info:#1d4ed8; --badbg:#fdeceb; --infobg:#e8effd;
+          --btn:#1d4ed8; --btnh:#1e40af; --btnb:#1d4ed8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1a2028; --ink:#e8ecf2; --mute:#9aa6b6; --line:#2b3440; --bad:#ff8a80; --info:#8ab4ff; --badbg:#3a1c1a; --infobg:#17233f;
+          --btn:#17233f; --btnh:#223564; --btnb:#3a5aa6; } }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,"Segoe UI",sans-serif; }
+  .wrap { max-width:1280px; margin:0 auto; padding:20px 16px 60px; }
+  .top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:4px; }
+  h1 { font-size:22px; margin:0; }
+  .top a { margin-left:auto; color:var(--info); text-decoration:none; } .top a:hover { text-decoration:underline; }
+  .sub { color:var(--mute); margin:2px 0 14px; }
+  .pick { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:14px; }
+  .pick label { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:13px; min-width:0; }
+  .pick small { font-weight:400; color:var(--mute); }
+  select { width:100%; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
+  .acts { display:flex; gap:8px; }
+  .btn { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; white-space:nowrap; }
+  .btn:hover:not(:disabled) { background:var(--infobg); } .btn:disabled { opacity:.5; cursor:default; }
+  .btn.primary { background:var(--btn); color:#fff; border-color:var(--btnb); font-weight:700; } .btn.primary:hover:not(:disabled) { background:var(--btnh); }
+  .err { background:var(--badbg); border-left:4px solid var(--bad); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+  .msg { color:var(--mute); padding:30px 0; text-align:center; }
+  .paper { background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px 24px; box-shadow:0 1px 3px rgba(0,0,0,.08); overflow-x:auto; }
+  @media (max-width:1000px) { .pick { grid-template-columns:1fr 1fr; } .acts { grid-column:1 / -1; } }
+  @media (max-width:640px) { .pick { grid-template-columns:1fr; } .paper { padding:14px; } }
+</style>
+<style id="rpcss"></style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>Report analysis</h1><a href="/runner">Back to the modules</a></div>
+  <p class="sub">Pick two saved runs of the same module. The older one is the baseline (Run 1), so the report shows what got better or worse in the newer run.</p>
+  <div class="pick">
+    <label>Run 1 <small id="r1hint">Any saved run from the last week</small><select id="a"></select></label>
+    <label>Run 2 <small>Only runs of the same module are offered</small><select id="b" disabled></select></label>
+    <div class="acts"><button class="btn primary" id="go" disabled>Compare</button><button class="btn" id="pdf" disabled>Download PDF</button></div>
+  </div>
+  <div id="err" class="err" hidden></div>
+  <div id="msg" class="msg">Loading the saved runs...</div>
+  <div id="out" class="paper" hidden></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const when = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '?';
+let runs = [];
+
+const label = (r) => `${r.name} - ${when(r.startedAt)} - ${r.passed} passed, ${r.failed} failed, ${r.defect} defects, ${r.skipped} skipped${r.finishedAt ? '' : ' (stopped early)'}`;
+const showErr = (text) => { $('err').textContent = text; $('err').hidden = !text; };
+
+function fillB() {
+  const a = runs.find((r) => r.file === $('a').value);
+  const keep = $('b').value;
+  const same = a ? runs.filter((r) => r.name === a.name && r.file !== a.file) : [];
+  $('b').innerHTML = '<option value="">' + (!a ? 'Choose Run 1 first' : same.length ? 'Choose a run' : 'No other run of this module in the last week') + '</option>' +
+    same.map((r) => `<option value="${esc(r.file)}">${esc(label(r))}</option>`).join('');
+  if (same.some((r) => r.file === keep)) $('b').value = keep;
+  $('b').disabled = !same.length;
+  ready();
+}
+function ready() {
+  const ok = !!$('a').value && !!$('b').value;
+  $('go').disabled = !ok; $('pdf').disabled = !ok;
+}
+const query = () => 'a=' + encodeURIComponent($('a').value) + '&b=' + encodeURIComponent($('b').value);
+
+async function load() {
+  try {
+    const data = await (await fetch('/api/report-runs', { cache: 'no-store' })).json();
+    runs = data.runs;
+    $('r1hint').textContent = `Any saved run from the last ${data.days} days (${runs.length})`;
+    if (!runs.length) { $('msg').textContent = 'No saved runs in the last week. Run a module first.'; return; }
+    $('a').innerHTML = '<option value="">Choose a run</option>' + runs.map((r) => `<option value="${esc(r.file)}">${esc(label(r))}</option>`).join('');
+    $('msg').textContent = 'Choose two runs and click Compare.';
+    // Start with the newest run that has an earlier run of the same module.
+    const pair = runs.find((r) => runs.some((o) => o.name === r.name && o.file !== r.file));
+    if (pair) { $('a').value = runs.find((o) => o.name === pair.name && o.file !== pair.file).file; fillB(); $('b').value = pair.file; ready(); }
+    else fillB();
+  } catch (err) { showErr('Could not load the saved runs (' + err.message + '). Is the runner server running? Refresh the page.'); $('msg').hidden = true; }
+}
+
+async function compare() {
+  showErr(''); $('msg').hidden = false; $('msg').textContent = 'Comparing...'; $('out').hidden = true;
+  const res = await fetch('/api/report?' + query(), { cache: 'no-store' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { showErr(data.error || 'The comparison failed (HTTP ' + res.status + ').'); $('msg').hidden = true; return; }
+  $('rpcss').textContent = data.css;
+  $('out').innerHTML = data.html; $('out').hidden = false; $('msg').hidden = true;
+}
+
+async function downloadPdf() {
+  showErr(''); const btn = $('pdf'); const text = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Making the PDF...';
+  try {
+    const res = await fetch('/api/report.pdf?' + query(), { cache: 'no-store' });
+    if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'HTTP ' + res.status); }
+    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'run-comparison.pdf';
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (err) { showErr('Could not make the PDF: ' + err.message); }
+  finally { btn.textContent = text; ready(); }
+}
+
+$('a').addEventListener('change', () => { fillB(); $('out').hidden = true; $('msg').hidden = false; $('msg').textContent = 'Choose two runs and click Compare.'; });
+$('b').addEventListener('change', ready);
+$('go').addEventListener('click', compare);
+$('pdf').addEventListener('click', downloadPdf);
+load();
+</script>
+</body>
+</html>
