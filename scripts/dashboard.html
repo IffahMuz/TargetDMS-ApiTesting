@@ -14,6 +14,8 @@
   body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 "Nunito","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   .wrap { max-width:1280px; margin:0 auto; padding:20px 16px 60px; }
   .top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:4px; }
+  /* The Saved runs menu takes the spare width, so the header lines up with the content's right edge (Reset sits flush right). */
+  #runs { flex:1 1 240px; min-width:200px; }
   h1 { font-size:22px; margin:0; }
   .state { font-weight:700; font-size:12px; padding:3px 12px; border-radius:999px; }
   .s-idle { background:var(--line); color:var(--mute); } .s-running { background:var(--infobg); color:var(--info); } .s-finished { background:var(--okbg); color:var(--ok); }
@@ -114,7 +116,7 @@
     <span id="modname" class="modname" hidden></span><button class="runbtn" id="gorun" hidden>Run</button><button class="btn" id="gostop" hidden>Stop</button><button class="btn" id="goreset" hidden title="Clear this page and show the Run button again">Reset</button></div>
   <p class="msg" id="modmsg" hidden></p>
   <div class="subrow"><p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p>
-    <a class="btn report" href="/report" target="_blank" title="Compare two saved runs and download a PDF"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Report analysis</a></div>
+    <a class="btn report" href="/report" target="_blank" title="Compare two saved runs and download a PDF">Report Analysis</a></div>
   <div class="progress" id="progress"><i style="background:var(--ok)"></i><i style="background:var(--def)"></i><i style="background:var(--bad)"></i><i style="background:var(--warn)"></i></div>
   <div class="cards" id="cards"></div>
   <div class="now" id="now" hidden></div>
