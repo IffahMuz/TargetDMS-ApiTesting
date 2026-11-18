@@ -411,6 +411,9 @@ http.createServer(async (req, res) => {
     // Only the last week is listed; older run files stay on disk but are not offered.
     const since = Date.now() - RUN_HISTORY_DAYS * 24 * 60 * 60 * 1000;
     json(res, files.map((file) => ({ file, ...runInfo(file) })).filter((r) => !r.startedAt || new Date(r.startedAt).getTime() >= since));
+  } else if (url.pathname === '/nav.js') {
+    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(fs.readFileSync(path.join(__dirname, 'nav.js')));
   } else if (url.pathname === '/json-view.js') {
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
     res.end(fs.readFileSync(path.join(__dirname, 'json-view.js')));

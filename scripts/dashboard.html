@@ -17,10 +17,8 @@
   .wrap { max-width:1420px; margin:0 auto; padding:20px 16px 60px; }
   .top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:4px; }
   /* The Saved runs menu takes the spare width, so the header lines up with the content's right edge (Reset sits flush right). */
-  /* Header: title on the left, Run / Reset on the right. Saved runs sits under them, on the Report Analysis line. */
+  /* Header: title on the left, Run / Reset on the right. Report Analysis and Saved runs are in the side menu. */
   .top .spacer { flex:1; }
-  .actrow { display:flex; align-items:center; gap:12px; width:100%; }
-  #runs { margin-left:auto; width:204px; min-width:0; text-overflow:ellipsis; }
   /* Run, Stop and Reset are the same size. */
   #gorun, #gostop, #goreset { min-width:96px; height:40px; padding:0 18px; line-height:1; display:inline-flex; align-items:center; justify-content:center; }
   h1 { font-size:22px; margin:0; }
@@ -107,23 +105,20 @@
   .msg.bad { background:var(--badbg); color:var(--bad); }
   .runbtn { background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:9px 26px; font:inherit; font-weight:700; cursor:pointer; }
   .runbtn:hover:not(:disabled) { background:var(--btnh); } .runbtn:disabled { opacity:.5; cursor:default; }
-  .btn.report { text-decoration:none; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:7px; padding:5px 12px; }
-  .btn.report svg { flex:none; }
-  /* The run details line sits right under the title; Report analysis is below it, on the left. */
+  /* The run details line sits right under the title. */
   .subrow { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin:2px 0 14px; } .subrow .sub { margin:0; }
 </style>
 <script src="/json-view.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap">
+<script src="/nav.js" defer></script>
 </head>
 <body>
 <div class="wrap">
   <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state s-idle">WAITING FOR A RUN</span><span class="spacer"></span>
     <span id="modname" class="modname" hidden></span><button class="runbtn" id="gorun" hidden>Run</button><button class="btn" id="gostop" hidden>Stop</button><button class="btn" id="goreset" hidden title="Clear this page and show the Run button again">Reset</button></div>
   <p class="msg" id="modmsg" hidden></p>
-  <div class="subrow"><p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p>
-    <div class="actrow"><a class="btn report" href="/report" target="_blank" title="Compare two saved runs and download a PDF">Report Analysis</a>
-      <select id="runs" class="btn" title="Open a saved run"><option value="">Saved runs</option></select></div></div>
+  <div class="subrow"><p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p></div>
   <div class="progress" id="progress"><i style="background:var(--ok)"></i><i style="background:var(--def)"></i><i style="background:var(--bad)"></i><i style="background:var(--warn)"></i></div>
   <div class="cards" id="cards"></div>
   <div class="now" id="now" hidden></div>
@@ -463,17 +458,7 @@ source.onmessage = (m) => {
 };
 setInterval(() => { if (run.status === 'running') renderHeader(); }, 1000);
 
-async function loadRuns() {
-  const runs = await (await fetch('/api/runs')).json();
-  // Module name - date - time - day, e.g. "Login and tokens - 30 Oct 2026 - 9:23 pm - Friday"
-  const nice = (r) => { const d = new Date(r.startedAt); return isNaN(d) ? r.file : [r.name, d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase(), d.toLocaleDateString('en-US', { weekday: 'long' })].join(' - '); };
-  $('runs').replaceChildren(new Option('Saved runs', ''), ...runs.map((r) => new Option(nice(r), r.file)));
-}
-$('runs').addEventListener('change', async () => {
-  if (!$('runs').value) return;
-  const r = await fetch('/api/load', { method: 'POST', body: JSON.stringify({ file: $('runs').value }) });
-  if (!r.ok) alert((await r.json()).error);
-});
+// Saved runs and Report Analysis are opened from the side menu (scripts/nav.js).
 // ---- opened from the runner page with ?module=<id>: show a Run button and start the run only when it is clicked ----
 const modId = new URLSearchParams(location.search).get('module');
 let modInfo = null, clickedAt = 0;
@@ -522,8 +507,6 @@ async function initModule() {
   setInterval(pollModule, 1500); pollModule();
 }
 if (modId) initModule();
-loadRuns();
-setInterval(loadRuns, 15000);
 </script>
 </body>
 </html>
