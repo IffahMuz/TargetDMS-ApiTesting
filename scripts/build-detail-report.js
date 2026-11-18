@@ -10,6 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+const JsonView = require('./json-view');
 
 const root = path.resolve(__dirname, '..');
 const workDir = process.env.WORK_DIR ? path.resolve(process.env.WORK_DIR) : path.join(os.tmpdir(), 'targetdms-api-tests');
@@ -80,10 +81,11 @@ const badge = (m) => `<span class="m ${m}">${m}</span>`;
 
 function exchangeHtml(x, open) {
   const ok = x.status >= 200 && x.status < 300;
-  const req = x.request === undefined ? '(no body)' : x.request;
-  const res = x.error ? x.error : x.response === undefined || x.response === '' ? '(empty body)' : x.response;
+  // Bodies are pretty, coloured JSON (scripts/json-view.js); "(no body)" and errors stay plain text.
+  const req = x.request === undefined || x.request === '' ? esc('(no body)') : JsonView.html(x.request);
+  const res = x.error ? esc(x.error) : x.response === undefined || x.response === '' ? esc('(empty body)') : JsonView.html(x.response);
   return `<details class="ex"${open ? ' open' : ''}><summary>${badge(x.method)}<span class="path">${esc(x.url)}</span><span class="st ${ok ? 'ok' : 'no'}">${x.error ? 'ERROR' : 'HTTP ' + x.status}</span><span class="nums">${x.ms} ms</span></summary>` +
-    `<div class="cols"><div><h4>Request payload</h4><pre>${esc(req)}</pre></div><div><h4>Response</h4><pre>${esc(res)}</pre></div></div></details>`;
+    `<div class="cols"><div><h4>Request payload</h4><pre class="json">${req}</pre></div><div><h4>Response</h4><pre class="json">${res}</pre></div></div></details>`;
 }
 
 function testBody(t, focus) {
@@ -142,6 +144,7 @@ const cards = [
 const sub = `${esc(spec.info?.title ?? 'TargetDMS API')} - dealer ${esc(process.env.DEALER_ID ?? '')} - run ${esc(new Date(run.startedAt).toLocaleString())} to ${esc(new Date(run.finishedAt).toLocaleTimeString())}`;
 
 const html = fs.readFileSync(path.join(__dirname, 'detail-report.template.html'), 'utf8')
+  .replace('</style>', () => `pre.json { line-height:1.5; padding:10px 12px; }\n${JsonView.css('pre.json')}\n</style>`)
   .replace('<!--SUB-->', () => sub).replace('<!--CARDS-->', () => cards)
   .replace('<!--TAGS-->', () => tags.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join(''))
   .replace('<!--FILES-->', () => files.map((f) => `<option value="${esc(f)}">${esc(f.replace(/^tests\//, ''))}</option>`).join(''))

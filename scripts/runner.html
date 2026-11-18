@@ -26,7 +26,8 @@
   .bar input, .btn { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; }
   .bar input { flex:1; min-width:220px; } .btn { cursor:pointer; } .btn:hover { background:var(--infobg); }
   .count { color:var(--mute); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:10px; }
+  /* Every row as tall as the tallest card, so all module boxes are the same size. */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); grid-auto-rows:1fr; gap:10px; }
   .mod { text-align:left; font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; cursor:pointer; display:flex; flex-direction:column; gap:6px; }
   .mod:hover:not(:disabled) { border-color:var(--btnb); background:var(--infobg); }
   .mod:disabled { opacity:.5; cursor:default; }
