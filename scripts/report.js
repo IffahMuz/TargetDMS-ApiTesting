@@ -134,7 +134,7 @@ function compareRuns(runA, runB, modules) {
 // ---- rendering --------------------------------------------------------------------------------------------------------
 const CSS = `
 .rp { --ok:#1a7f4b; --bad:#b42318; --warn:#a15c00; --def:#7a3db8; --mute:#5b6675; --line:#e2e6ec; --okbg:#e6f4ec; --badbg:#fdeceb; --warnbg:#fff4e0; --defbg:#f1e8fb; --head:#f3f5f8;
-  color:#1c2430; background:#fff; font:13px/1.45 system-ui,"Segoe UI",sans-serif; }
+  color:#1c2430; background:#fff; font:13px/1.45 "Nunito","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; }
 .rp h2 { font-size:20px; margin:0 0 2px; } .rp h3 { font-size:15px; margin:22px 0 8px; padding-bottom:4px; border-bottom:2px solid var(--line); break-after:avoid; }
 .rp .sub { color:var(--mute); margin:0 0 14px; }
 .rp .headline { background:var(--head); border-left:4px solid #1d4ed8; border-radius:6px; padding:10px 14px; margin:10px 0 4px; font-size:14px; }
@@ -161,7 +161,7 @@ const CSS = `
 .rp .legend.inline { flex-direction:row; flex-wrap:wrap; gap:14px; margin-bottom:4px; }
 .rp .lg { display:flex; align-items:center; gap:6px; } .rp .lg i { width:10px; height:10px; border-radius:3px; flex:none; }
 .rp .lg b { margin-left:auto; padding-left:10px; } .rp .lg span { color:var(--mute); width:44px; text-align:right; }
-.rp svg text { font-family:system-ui,"Segoe UI",sans-serif; }
+.rp svg text { font-family:"Nunito","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; }
 .rp svg .big { font-size:22px; font-weight:700; fill:#1c2430; } .rp svg .small { font-size:11px; fill:#5b6675; }
 .rp svg .lbl { font-size:12px; fill:#1c2430; } .rp svg .val { font-size:11px; fill:#5b6675; } .rp svg .axis { font-size:10px; fill:#8a94a3; }
 .rp svg .grid { stroke:#eef1f4; stroke-width:1; }
@@ -294,7 +294,7 @@ ${c.endpoints.onlyIn2.length ? `<p class="note">Called only in Run 2: ${c.endpoi
 }
 
 /** A standalone page of the report, for printing to PDF. */
-const printPage = (c) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Run comparison - ${esc(c.run2.name)}</title>
+const printPage = (c) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap"><title>Run comparison - ${esc(c.run2.name)}</title>
 <style>@page { size:A4; margin:14mm 12mm; } body { margin:0; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; } ${CSS}</style></head><body>${renderReport(c)}</body></html>`;
 
 function edgePath() {

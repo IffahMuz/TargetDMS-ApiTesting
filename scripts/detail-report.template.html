@@ -10,7 +10,7 @@
   @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1a2028; --ink:#e8ecf2; --mute:#9aa6b6; --line:#2b3440; --ok:#5fcf93; --bad:#ff8a80; --warn:#f5b85a; --info:#8ab4ff; --def:#c9a2f5;
           --okbg:#16301f; --badbg:#3a1c1a; --warnbg:#392a10; --infobg:#17233f; --defbg:#2b1d3f; --code:#0f1318; } }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,"Segoe UI",sans-serif; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 "Nunito","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   .wrap { max-width:1280px; margin:0 auto; padding:20px 16px 60px; }
   h1 { font-size:22px; margin:0 0 2px; } .sub { color:var(--mute); margin:0 0 16px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px; }
@@ -66,6 +66,8 @@
   a.goto { color:var(--info); font-size:12px; }
   details.row[id] { scroll-margin-top:12px; }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap">
 </head>
 <body>
 <div class="wrap">
