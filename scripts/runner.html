@@ -37,16 +37,20 @@
   .chip.warn { background:var(--warnbg); color:var(--warn); }
   .go { margin-left:auto; background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:4px 14px; font-weight:700; }
   .mod:hover:not(:disabled) .go { background:var(--btnh); }
-  .report { margin-left:auto; background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:7px 16px; font-weight:700; text-decoration:none; }
-  .report:hover { background:var(--btnh); }
+  /* Same as the module pages: the description right under the title, Report analysis below it on the left. */
+  .subrow { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin:2px 0 14px; } .subrow .sub { margin:0; }
+  .report { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:5px 12px; font-weight:700; text-decoration:none; white-space:nowrap;
+            display:inline-flex; align-items:center; gap:7px; }
+  .report:hover { background:var(--infobg); } .report svg { flex:none; }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap">
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state">READY</span><a class="report" href="/report" target="_blank">Report analysis</a></div>
-  <p class="sub">Choose a module. The live dashboard opens in a new tab with a Run button; the run starts when you click it.</p>
+  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state">READY</span></div>
+  <div class="subrow"><p class="sub">Choose a module. The live dashboard opens in a new tab with a Run button; the run starts when you click it.</p>
+    <a class="report" href="/report" target="_blank" title="Compare two saved runs and download a PDF"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Report analysis</a></div>
   <div id="err" class="err" hidden></div>
   <div id="now" class="now" hidden>
     <div class="grow"><b id="nowName"></b><small id="nowInfo"></small></div>

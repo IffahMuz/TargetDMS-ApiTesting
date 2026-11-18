@@ -44,6 +44,9 @@
   .row[open] > summary::before, .ex[open] > summary::before { transform:translateY(-50%) rotate(90deg); }
   .row[open] > summary { border-bottom:1px solid var(--line); background:var(--bg); }
   /* Test names: a soft, rounded font (Nunito; falls back to the system font when offline). */
+  /* Softer than the page's main text colour, so the test names do not glare (light and dark). */
+  .ttl { color:#3a4655; }
+  @media (prefers-color-scheme: dark) { .ttl { color:#bcc5d1; } }
   .ttl { font-family:"Nunito","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; font-size:15px; font-weight:500; letter-spacing:.15px; line-height:1.4;
          -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; }
   .path { font-family:ui-monospace,Consolas,monospace; font-size:13px; word-break:break-all; } .path small { display:block; color:var(--mute); font-family:inherit; }
@@ -95,7 +98,10 @@
   .msg.bad { background:var(--badbg); color:var(--bad); }
   .runbtn { background:var(--btn); color:#fff; border:1px solid var(--btnb); border-radius:8px; padding:9px 26px; font:inherit; font-weight:700; cursor:pointer; }
   .runbtn:hover:not(:disabled) { background:var(--btnh); } .runbtn:disabled { opacity:.5; cursor:default; }
-  .btn.report { text-decoration:none; font-weight:700; white-space:nowrap; }
+  .btn.report { text-decoration:none; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:7px; padding:5px 12px; }
+  .btn.report svg { flex:none; }
+  /* The run details line sits right under the title; Report analysis is below it, on the left. */
+  .subrow { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin:2px 0 14px; } .subrow .sub { margin:0; }
 </style>
 <script src="/json-view.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -105,9 +111,10 @@
 <div class="wrap">
   <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state s-idle">WAITING FOR A RUN</span>
     <select id="runs" class="btn" title="Open a saved run"><option value="">Saved runs</option></select>
-    <span id="modname" class="modname" hidden></span><button class="runbtn" id="gorun" hidden>Run</button><button class="btn" id="gostop" hidden>Stop</button><button class="btn" id="goreset" hidden title="Clear this page and show the Run button again">Reset</button><a class="btn report" href="/report" target="_blank" title="Compare two saved runs and download a PDF">Report analysis</a></div>
+    <span id="modname" class="modname" hidden></span><button class="runbtn" id="gorun" hidden>Run</button><button class="btn" id="gostop" hidden>Stop</button><button class="btn" id="goreset" hidden title="Clear this page and show the Run button again">Reset</button></div>
   <p class="msg" id="modmsg" hidden></p>
-  <p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p>
+  <div class="subrow"><p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p>
+    <a class="btn report" href="/report" target="_blank" title="Compare two saved runs and download a PDF"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Report analysis</a></div>
   <div class="progress" id="progress"><i style="background:var(--ok)"></i><i style="background:var(--def)"></i><i style="background:var(--bad)"></i><i style="background:var(--warn)"></i></div>
   <div class="cards" id="cards"></div>
   <div class="now" id="now" hidden></div>
