@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run report - Integration Tests Live Runner</title>
+<style id="base">
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mute:#5b6675; --line:#e2e6ec; --bad:#b42318; --info:#1d4ed8; --badbg:#fdeceb; --infobg:#e8effd;
+          --btn:#1d4ed8; --btnh:#1e40af; --btnb:#1d4ed8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1a2028; --ink:#e8ecf2; --mute:#9aa6b6; --line:#2b3440; --bad:#ff8a80; --info:#8ab4ff; --badbg:#3a1c1a; --infobg:#17233f;
+          --btn:#17233f; --btnh:#223564; --btnb:#3a5aa6; } }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  /* Everything a little smaller, evenly, so the proportions stay the same (Edge/Chrome page zoom). */
+  html { zoom:0.9; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 "Nunito","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  .wrap { max-width:1420px; margin:0 auto; padding:20px 16px 60px; }
+  .top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:4px; }
+  h1 { font-size:22px; margin:0; }
+  .top .acts { margin-left:auto; display:flex; gap:8px; }
+  .sub { color:var(--mute); margin:2px 0 14px; }
+  .btn { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; white-space:nowrap; text-decoration:none; }
+  .btn:hover:not(:disabled) { background:var(--infobg); } .btn:disabled { opacity:.5; cursor:default; }
+  .btn.primary { background:var(--btn); color:#fff; border-color:var(--btnb); font-weight:700; } .btn.primary:hover:not(:disabled) { background:var(--btnh); }
+  .err { background:var(--badbg); border-left:4px solid var(--bad); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+  .msg { color:var(--mute); padding:30px 0; text-align:center; }
+  .paper { background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px 24px; box-shadow:0 1px 3px rgba(0,0,0,.08); overflow-x:auto; }
+  @media (max-width:640px) { .paper { padding:14px; } }
+</style>
+<style id="rpcss"></style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap">
+<script src="/nav.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1 id="title">Run report</h1><div class="acts"><button class="btn primary" id="pdf" disabled>Download PDF</button></div></div>
+  <p class="sub" id="sub">The results of one run: what passed, what failed and why, per module, endpoints and timing.</p>
+  <div id="err" class="err" hidden></div>
+  <div id="msg" class="msg">Making the report...</div>
+  <div id="out" class="paper" hidden></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const file = new URLSearchParams(location.search).get('file') || '';
+const showErr = (text) => { $('err').textContent = text; $('err').hidden = !text; };
+
+async function load() {
+  if (!file) { $('msg').hidden = true; showErr('No run was given. Open this page from "Generate Report" after a run, or from Saved runs in the menu.'); return; }
+  const res = await fetch('/api/run-report?file=' + encodeURIComponent(file), { cache: 'no-store' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { $('msg').hidden = true; showErr(data.error || 'The report could not be made (HTTP ' + res.status + ').'); return; }
+  document.title = 'Run report - ' + data.name + ' - Integration Tests Live Runner';
+  $('title').textContent = 'Run report: ' + data.name;
+  $('rpcss').textContent = data.css;
+  $('out').innerHTML = data.html; $('out').hidden = false; $('msg').hidden = true; $('pdf').disabled = false;
+}
+
+$('pdf').addEventListener('click', async () => {
+  showErr(''); const btn = $('pdf'); btn.disabled = true; btn.textContent = 'Making the PDF...';
+  try {
+    const res = await fetch('/api/run-report.pdf?file=' + encodeURIComponent(file), { cache: 'no-store' });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'HTTP ' + res.status); }
+    const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'run-report.pdf';
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (err) { showErr('Could not make the PDF: ' + err.message); }
+  finally { btn.textContent = 'Download PDF'; btn.disabled = false; }
+});
+load();
+</script>
+</body>
+</html>

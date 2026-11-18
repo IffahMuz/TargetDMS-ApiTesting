@@ -35,7 +35,9 @@
   .c-ok b { color:var(--ok); } .c-bad b { color:var(--bad); } .c-warn b { color:var(--warn); } .c-def b { color:var(--def); } .c-info b { color:var(--info); }
   .now { background:var(--infobg); border-left:4px solid var(--info); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
   .now small { display:block; color:var(--mute); }
-  .tabs { display:flex; gap:6px; margin-bottom:10px; }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; align-items:center; }
+  /* Generate Report: shown at the right of the tabs once a run has finished (or a saved run is open). */
+  .genrep { margin-left:auto; text-decoration:none; height:40px; padding:0 18px; display:inline-flex; align-items:center; }
   .tab { border:1px solid var(--line); background:var(--card); color:var(--ink); padding:7px 14px; border-radius:8px; cursor:pointer; font:inherit; }
   .tab.on { background:var(--btn); color:#fff; border-color:var(--btnb); }
   .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center; }
@@ -123,7 +125,8 @@
   <div class="cards" id="cards"></div>
   <div class="now" id="now" hidden></div>
 
-  <div class="tabs"><button class="tab on" data-tab="tc">Test cases</button><button class="tab" data-tab="cov" id="covtab" hidden>Coverage</button><button class="tab" data-tab="ep">Endpoints</button></div>
+  <div class="tabs"><button class="tab on" data-tab="tc">Test cases</button><button class="tab" data-tab="cov" id="covtab" hidden>Coverage</button><button class="tab" data-tab="ep">Endpoints</button>
+    <a class="runbtn genrep" id="genrep" target="_blank" hidden title="The report of this run: results per module, failures in plain words, endpoints, timing, and a PDF">Generate Report</a></div>
 
   <section id="tc">
     <div class="bar">
@@ -183,6 +186,10 @@ function renderHeader() {
   const st = $('state');
   st.className = 'state s-' + run.status;
   st.textContent = run.status === 'running' ? 'RUNNING' : run.status === 'finished' ? 'FINISHED' : 'WAITING FOR A RUN';
+  // Generate Report: once the run has finished, link to the report of its saved file (the same name the server saves it under).
+  const done1 = run.status === 'finished' && !!run.startedAt;
+  $('genrep').hidden = !done1;
+  if (done1) $('genrep').href = '/run-report?file=' + encodeURIComponent('run-' + run.startedAt.replace(/[:.]/g, '-') + '.json');
   $('sub').textContent = run.startedAt ? `Dealer ${run.dealer} - started ${new Date(run.startedAt).toLocaleTimeString()}` +
     (run.status === 'finished' ? ` - ended ${new Date(run.finishedAt).toLocaleTimeString()} - took ${fmtDur(new Date(run.finishedAt) - new Date(run.startedAt))}` : ` - ${fmtDur(Date.now() - new Date(run.startedAt))} so far`) +
     ` - ${done} of ${total} tests done` : 'Not run yet. Click Run (or start the suite with npm test); the tests appear here as they run.';

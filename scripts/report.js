@@ -213,7 +213,7 @@ function hbars(title, rows, { max, unit = '', legend = [], note = '' } = {}) {
     }).join('');
   }).join('');
   const lg = legend.length ? `<div class="legend inline">${legend.map((l) => `<div class="lg"><i style="background:${l.color}"></i>${esc(l.name)}</div>`).join('')}</div>` : '';
-  return `<figure class="chart"><figcaption>${esc(title)}</figcaption>${lg}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(title)}">${grid}${bars}</svg>${note ? `<p class="note">${note}</p>` : ''}</figure>`;
+  return `<figure class="chart"><figcaption>${esc(title)}</figcaption>${lg}<svg viewBox="0 0 ${W} ${H}" width="${W}" style="max-width:100%;height:auto;display:block" role="img" aria-label="${esc(title)}">${grid}${bars}</svg>${note ? `<p class="note">${note}</p>` : ''}</figure>`;
 }
 
 function charts(c) {
@@ -293,6 +293,70 @@ ${c.endpoints.onlyIn2.length ? `<p class="note">Called only in Run 2: ${c.endpoi
 </div>`;
 }
 
+// ---- the report of one run ("Generate Report" on the dashboard after a run) ---------------------------------------------
+/** Everything the one-run report shows, worked out from a saved run. */
+function summarizeRun(saved, modules) {
+  const run = saved.run, tests = run.tests ?? [];
+  const c = counts(tests);
+  const row = (t) => ({ title: t.title, group: t.group ?? '', file: t.file, why: plainError(t), modules: modulesOf(t, modules).map((m) => m.name), skip: t.skipReason || '' });
+  const perModule = modules.filter((m) => m.id !== 'all' && m.id !== 'defects').map((m) => {
+    const mine = tests.filter((t) => modulesOf(t, [m]).length);
+    const mc = counts(mine);
+    return { name: m.name, total: mine.length, ...mc, rate: passRate(mc) };
+  }).filter((m) => m.total);
+  const eps = endpointStats(tests);
+  const endpoints = [...eps.entries()].map(([k, e]) => ({ endpoint: k, calls: e.calls, ok: e.ok, statuses: [...e.statuses].join(', ') }))
+    .sort((a, b) => (a.ok ? 1 : 0) - (b.ok ? 1 : 0) || a.endpoint.localeCompare(b.endpoint));
+  const ms = run.startedAt && run.finishedAt ? new Date(run.finishedAt) - new Date(run.startedAt) : tests.reduce((s, t) => s + (t.ms || 0), 0);
+  return {
+    file: saved.file, name: saved.name, startedAt: run.startedAt, finishedAt: run.finishedAt, dealer: run.dealer ?? '', ms,
+    total: tests.length, ...c, rate: passRate(c),
+    failed: tests.filter((t) => t.status === 'failed').map(row),
+    defects: tests.filter((t) => t.status === 'defect').map(row),
+    skipped: tests.filter((t) => t.status === 'skipped').map(row),
+    perModule, endpoints, working: endpoints.filter((e) => e.ok).length,
+    slowest: [...tests].filter((t) => t.ms).sort((a, b) => b.ms - a.ms).slice(0, 10).map((t) => ({ title: t.title, file: t.file, ms: t.ms })),
+  };
+}
+
+function renderRunReport(s) {
+  const r = { ...s, failed: s.failed.length, defect: s.defects.length, skipped: s.skipped.length };   // counts for the donut
+  const headline = `<b>${s.passed}</b> of ${s.total} tests passed (pass rate ${s.rate}% of the tests that ran). `
+    + `${s.failed.length ? `<b>${s.failed.length}</b> failed unexpectedly` : 'No unexpected failures'}, ${s.defects.length} known server defect${s.defects.length === 1 ? '' : 's'} still failing, ${s.skipped.length} skipped. `
+    + `${s.working} of ${s.endpoints.length} endpoints called answered successfully.`;
+  const modBars = s.perModule.length > 1 ? hbars('Pass rate per module', s.perModule.map((m) => ({ label: m.name, values: [{ v: m.rate, color: RUN_COLORS[1], name: 'Pass rate' }] })), { max: 100, unit: '%' }) : '';
+  const modTable = s.perModule.length ? `<table><tr><th>Module</th><th class="n">Tests</th><th class="n">Passed</th><th class="n">Failed</th><th class="n">Known defects</th><th class="n">Skipped</th><th class="n">Pass rate</th></tr>${s.perModule.map((m) =>
+    `<tr><td>${esc(m.name)}</td><td class="n">${m.total}</td><td class="n">${m.passed}</td><td class="n">${m.failed}</td><td class="n">${m.defect}</td><td class="n">${m.skipped}</td><td class="n">${m.rate}%</td></tr>`).join('')}</table>` : '<p class="none">No module data.</p>';
+  const epTable = (rows) => (rows.length ? `<table><tr><th>Endpoint</th><th class="n">Calls</th><th class="n">2xx</th><th>Statuses seen</th></tr>${rows.map((e) =>
+    `<tr><td>${esc(e.endpoint)}</td><td class="n">${e.calls}</td><td class="n">${e.ok}</td><td>${esc(e.statuses)}</td></tr>`).join('')}</table>` : '<p class="none">None.</p>');
+  const notWorking = s.endpoints.filter((e) => !e.ok);
+  return `<div class="rp">
+<h2>Run report: ${esc(s.name)}</h2>
+<p class="sub">${when(s.startedAt)} - took ${secs(s.ms)}${s.dealer ? ' - dealer ' + esc(s.dealer) : ''} - ${s.total} tests.</p>
+<div class="headline">${headline}</div>
+${donut(r, 'Results')}
+
+<h3>1. Modules</h3>${modBars}${modTable}
+<p class="note">A test can belong to more than one module, so the module rows do not add up to the run total. Pass rate leaves skipped tests out.</p>
+
+<h3>2. Failed unexpectedly (${s.failed.length})</h3>${testList(s.failed)}
+<h3>3. Known server defects still failing (${s.defects.length})</h3>${testList(s.defects)}
+<h3>4. Skipped (${s.skipped.length})</h3>${testList(s.skipped, { head: 'Why skipped', cell: (x) => esc(x.skip || '-') })}
+
+<h3>5. Endpoints</h3>
+<p class="note">${s.endpoints.length} endpoints were called; ${s.working} answered 2xx at least once.</p>
+<b>Never answered successfully (${notWorking.length})</b>${epTable(notWorking)}
+<b>All endpoints called</b>${epTable(s.endpoints)}
+
+<h3>6. Timing</h3>
+<p class="note">The run took ${secs(s.ms)}. Most of a long run is the request limit (80 calls per 3 minutes), not server speed.</p>
+${s.slowest.length ? `<table><tr><th>Slowest tests</th><th class="n">Time</th></tr>${s.slowest.map((t) => `<tr><td>${esc(t.title)}<div class="where">${esc(t.file)}</div></td><td class="n">${secs(t.ms)}</td></tr>`).join('')}</table>` : ''}
+</div>`;
+}
+
+const runPrintPage = (s) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap"><title>Run report - ${esc(s.name)}</title>
+<style>@page { size:A4; margin:14mm 12mm; } body { margin:0; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; } ${CSS}</style></head><body>${renderRunReport(s)}</body></html>`;
+
 /** A standalone page of the report, for printing to PDF. */
 const printPage = (c) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap"><title>Run comparison - ${esc(c.run2.name)}</title>
 <style>@page { size:A4; margin:14mm 12mm; } body { margin:0; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; } ${CSS}</style></head><body>${renderReport(c)}</body></html>`;
@@ -321,4 +385,4 @@ function htmlToPdf(html) {
   });
 }
 
-module.exports = { compareRuns, renderReport, printPage, htmlToPdf, CSS, counts, passRate };
+module.exports = { compareRuns, renderReport, printPage, htmlToPdf, CSS, counts, passRate, summarizeRun, renderRunReport, runPrintPage };

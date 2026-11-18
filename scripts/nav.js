@@ -72,6 +72,7 @@
       <div class="nv-body">
         <a class="nv-link${here.pathname === '/runner' ? ' on' : ''}" href="/runner" title="Integration Tests Live Runner: every module in boxes">Home</a>
         <a class="nv-link${here.pathname === '/report' ? ' on' : ''}" href="/report">Report Analysis</a>
+        <a class="nv-link${curModule === 'all' && here.searchParams.get('tab') === 'coverage' ? ' on' : ''}" href="/?module=all&amp;tab=coverage" title="Endpoint coverage of the whole suite, with a row per module">Coverage</a>
         <details class="nv-fold"><summary>Modules <span class="nv-count" id="nv-modcount"></span></summary><div id="nv-mods"><div class="nv-empty">Loading...</div></div></details>
         <details class="nv-fold"><summary>Saved runs (last week) <span class="nv-count" id="nv-runcount"></span></summary><div id="nv-runs"><div class="nv-empty">Loading...</div></div></details>
         <div class="nv-msg" id="nv-msg" hidden></div>

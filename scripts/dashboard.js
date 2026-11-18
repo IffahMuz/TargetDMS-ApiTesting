@@ -417,6 +417,22 @@ http.createServer(async (req, res) => {
   } else if (url.pathname === '/json-view.js') {
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
     res.end(fs.readFileSync(path.join(__dirname, 'json-view.js')));
+  } else if (url.pathname === '/run-report') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(fs.readFileSync(path.join(__dirname, 'run-report.html')));
+  } else if (url.pathname === '/api/run-report' || url.pathname === '/api/run-report.pdf') {
+    // The report of one saved run ("Generate Report" on the dashboard after a run).
+    const file = path.basename(url.searchParams.get('file') ?? '');
+    const full = path.join(runsDir, file);
+    if (!/^run-.*\.json$/.test(file) || !fs.existsSync(full)) return json(res, { error: 'That run is not saved (yet). Wait for the run to finish, then try again.' }, 404);
+    const summary = report.summarizeRun({ file, name: runInfo(file).name, run: JSON.parse(fs.readFileSync(full, 'utf8')) }, MODULES);
+    if (url.pathname === '/api/run-report') return json(res, { css: report.CSS, html: report.renderRunReport(summary), name: summary.name, startedAt: summary.startedAt });
+    try {
+      const pdf = await report.htmlToPdf(report.runPrintPage(summary));
+      const name = `run-report-${summary.name.replace(/[^\w-]+/g, '-')}-${(summary.startedAt ?? '').slice(0, 16).replace(/[T:]/g, '-')}.pdf`;
+      res.writeHead(200, { 'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' });
+      res.end(pdf);
+    } catch (err) { json(res, { error: String(err.message ?? err) }, 500); }
   } else if (url.pathname === '/report') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     res.end(fs.readFileSync(path.join(__dirname, 'report.html')));
