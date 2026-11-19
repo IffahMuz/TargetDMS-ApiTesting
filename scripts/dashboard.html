@@ -102,6 +102,12 @@
   /* narrow screens: the result, title and timing stack, but the ADO button stays on the same line, at the right of the row */
   @media (max-width:760px) { .row > summary, .erow > summary { grid-template-columns:minmax(0,1fr) auto; } .row > summary > :not(.btn) { grid-column:1; } .row > summary > .btn.ado { grid-column:2; grid-row:1 / span 4; align-self:center; } .cols { grid-template-columns:1fr; } }
   .modname { color:var(--mute); font-weight:600; }
+  /* Page title as a breadcrumb: Home > the module (Home goes back to the module boxes). */
+  #crumbs { display:flex; align-items:center; gap:10px; }
+  #crumbs .crumb { color:var(--mute); text-decoration:none; font-weight:600; padding:2px 8px; margin:-2px -8px; border-radius:8px; transition:background .12s, color .12s; }
+  /* Hover like the app's other buttons and menu items: the soft tint background and the main text colour, no underline. */
+  #crumbs .crumb:hover { color:var(--ink); background:var(--infobg); text-decoration:none; }
+  #crumbs .sep { color:var(--mute); font-weight:400; }
   .plainrow { display:grid; grid-template-columns:110px minmax(0,1fr) 260px; gap:10px; align-items:center; padding:8px 12px; }
   @media (max-width:760px) { .plainrow { grid-template-columns:minmax(0,1fr); } }
   .modrow { display:grid; grid-template-columns:minmax(180px,1.2fr) minmax(120px,2fr) 150px 50px; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-bottom:6px; color:var(--ink); text-decoration:none; }
@@ -123,7 +129,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><h1>Integration Tests Live Runner</h1><span id="state" class="state s-idle">WAITING FOR A RUN</span><span class="spacer"></span>
+  <div class="top"><h1 id="crumbs"><a class="crumb" href="/runner">Home</a><span class="sep" aria-hidden="true">&rsaquo;</span><span id="crumbname">Live run</span></h1><span id="state" class="state s-idle">WAITING FOR A RUN</span><span class="spacer"></span>
     <span id="modname" class="modname" hidden></span><button class="runbtn" id="gorun" hidden>Run</button><button class="btn" id="gostop" hidden>Stop</button><button class="btn" id="goreset" hidden title="Clear this page and show the Run button again">Reset</button></div>
   <p class="msg" id="modmsg" hidden></p>
   <div class="subrow"><p class="sub" id="sub">Start the suite with <code>npm test</code>; tests appear here as they run.</p></div>
@@ -192,6 +198,8 @@ function renderHeader() {
   const st = $('state');
   st.className = 'state s-' + run.status;
   st.textContent = run.status === 'running' ? 'RUNNING' : run.status === 'finished' ? 'FINISHED' : 'WAITING FOR A RUN';
+  // Without a module in the address (a run started elsewhere, or a saved run opened from the menu): Home > that run's module.
+  if (!new URLSearchParams(location.search).get('module')) $('crumbname').textContent = run.label || 'Live run';
   // Generate Report: once the run has finished, link to the report of its saved file (the same name the server saves it under).
   const done1 = run.status === 'finished' && !!run.startedAt;
   $('genrep').hidden = !done1;
@@ -499,12 +507,13 @@ async function initModule() {
   showPlanned();
   const info = await (await fetch('/api/modules', { cache: 'no-store' })).json();
   modInfo = info.modules.find((m) => m.id === modId);
-  $('gorun').hidden = false; $('goreset').hidden = false; $('modname').hidden = false; $('covtab').hidden = !modInfo;
+  // The module's name is shown in the breadcrumb (Home > module), not next to Run.
+  $('gorun').hidden = false; $('goreset').hidden = false; $('covtab').hidden = !modInfo;
   // Opened from a row of "Coverage by module": start on the Coverage tab.
   if (modInfo && new URLSearchParams(location.search).get('tab') === 'coverage') $('covtab').click();
-  if (!modInfo) { $('modname').textContent = 'Unknown module'; $('gorun').disabled = true; say('There is no module "' + modId + '". Go back to the runner page and choose one.', true); return; }
+  if (!modInfo) { $('crumbname').textContent = 'Unknown module'; $('gorun').disabled = true; say('There is no module "' + modId + '". Go back to the runner page and choose one.', true); return; }
   document.title = modInfo.name + ' - Integration Tests Live Runner';
-  $('modname').textContent = modInfo.name; $('modname').title = modInfo.description; $('gorun').title = 'Run: ' + modInfo.name;
+  $('crumbname').textContent = modInfo.name; $('crumbname').title = modInfo.description; $('gorun').title = 'Run: ' + modInfo.name;
   $('gorun').addEventListener('click', async () => {
     if (modInfo.finalizes && !confirm('"' + modInfo.name + '" really checks orders out. That finalizes orders, uses stock and leaves payments behind on the test dealer.\n\nRun it?')) return;
     clickedAt = Date.now(); $('gorun').disabled = true; say('Starting...');
