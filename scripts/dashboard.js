@@ -248,6 +248,28 @@ function runInfo(file) {
   return runInfoCache.get(file);
 }
 
+// ---- the newest saved copy of one test (for tests that have not run on the page yet) ----------------------------------------
+const runFileCache = new Map();   // file -> parsed run; files do not change once saved
+function savedRun(file) {
+  if (!runFileCache.has(file)) {
+    try { runFileCache.set(file, JSON.parse(fs.readFileSync(path.join(runsDir, file), 'utf8'))); } catch { runFileCache.set(file, null); }
+    if (runFileCache.size > 6) runFileCache.delete(runFileCache.keys().next().value);
+  }
+  return runFileCache.get(file);
+}
+/** The test as it ran last (newest saved run first) with its requests, matched by file, group and title. */
+function lastSavedTest(file, group, title) {
+  if (!file || !title) return null;
+  const norm = (s) => String(s ?? '').replace(/ › /g, ' > ');
+  const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')).sort().reverse() : [];
+  for (const f of files) {
+    const run = savedRun(f);
+    const test = run?.tests?.find((x) => x.file === file && x.title === title && norm(x.group) === norm(group) && x.exchanges?.length);
+    if (test) return { test, startedAt: run.startedAt, name: runInfo(f).name };
+  }
+  return null;
+}
+
 // ---- report analysis (compare two saved runs) -----------------------------------------------------------------------------
 const recentRunFiles = () => {
   const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')).sort().reverse() : [];
@@ -404,8 +426,14 @@ http.createServer(async (req, res) => {
   } else if (url.pathname === '/api/endpoints') {
     json(res, await coverage());
   } else if (url.pathname.startsWith('/api/test/')) {
+    // A test of the shown run. When it has not run here yet (waiting, or a planned row before Run), show the requests and
+    // responses from the newest saved run that has it, so the payloads are always visible.
     const t = state.tests.get(decodeURIComponent(url.pathname.slice('/api/test/'.length)));
-    t ? json(res, { error: t.error, skipReason: t.skipReason, exchanges: t.exchanges }) : json(res, { error: 'unknown test' }, 404);
+    if (t && t.exchanges?.length) return json(res, { error: t.error, skipReason: t.skipReason, exchanges: t.exchanges });
+    const p = url.searchParams;
+    const prev = lastSavedTest(t?.file ?? p.get('file'), t?.group ?? p.get('group') ?? '', t?.title ?? p.get('title'));
+    if (prev) return json(res, { error: prev.test.error, skipReason: prev.test.skipReason, exchanges: prev.test.exchanges, from: { startedAt: prev.startedAt, name: prev.name, status: prev.test.status } });
+    json(res, { error: t?.error ?? '', skipReason: t?.skipReason ?? '', exchanges: t?.exchanges ?? [], from: null });
   } else if (url.pathname === '/api/runs') {
     const files = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((f) => f.endsWith('.json')).sort().reverse() : [];
     // Only the last week is listed; older run files stay on disk but are not offered.

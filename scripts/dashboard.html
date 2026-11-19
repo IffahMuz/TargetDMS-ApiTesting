@@ -77,6 +77,7 @@
   .plain { background:var(--warnbg); border-left:4px solid var(--warn); padding:10px 14px; border-radius:6px; margin:6px 0; }
   .plain b { display:block; margin-bottom:2px; } .plain.net { background:var(--infobg); border-color:var(--info); } .plain.net b { color:var(--info); }
   .note { background:var(--warnbg); border-left:4px solid var(--warn); padding:8px 12px; border-radius:6px; margin:4px 0; }
+  .note.info { background:var(--infobg); border-left-color:var(--info); }
   .err { background:var(--badbg); border-left:4px solid var(--bad); padding:8px 12px; border-radius:6px; margin:6px 0; white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Consolas,monospace; }
   .ex { border:1px solid var(--line); border-radius:8px; margin:8px 0; }
   .ex > summary { cursor:pointer; position:relative; padding:7px 10px 7px 28px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; list-style:none; }
@@ -270,8 +271,21 @@ function explain(t, detail) {
 async function fillBody(d, t, focusEndpoint) {
   const body = el('div', 'body', 'Loading...');
   d.appendChild(body);
-  const detail = await (await fetch('/api/test/' + encodeURIComponent(t.id))).json();
+  const where = new URLSearchParams({ file: t.file || '', group: t.group || '', title: t.title || '' });
+  const detail = await (await fetch('/api/test/' + encodeURIComponent(t.id) + '?' + where)).json().catch(() => ({ exchanges: [] }));
+  detail.exchanges = detail.exchanges || [];
   body.replaceChildren(el('div', 'gname', `${t.file}:${t.line}` + (t.group ? '  |  ' + t.group : '')));
+  // Not run on this page yet: the requests below come from the newest saved run of this test.
+  const notRunHere = t.status === 'queued' || t.status === 'running' || !t.status;
+  if (detail.from) {
+    const d0 = new Date(detail.from.startedAt);
+    body.appendChild(el('div', 'note info', `This test has not run here yet. Showing its requests and responses from the last saved run: ${detail.from.name}, ${isNaN(d0) ? '' : d0.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} (${(LABEL[detail.from.status] || detail.from.status || '').toLowerCase()}).`));
+  }
+  if (notRunHere) {   // an earlier run's error or skip reason does not belong to this page: show only its requests
+    if (!detail.exchanges.length) body.appendChild(el('div', 'gname', 'This test has not run yet and no saved run has its requests. Click Run to see what it sends and gets back.'));
+    detail.exchanges.forEach((x, i) => body.appendChild(exchange(x, i === 0)));
+    return;
+  }
   if (detail.skipReason) body.appendChild(el('div', 'note', 'Skipped: ' + detail.skipReason));
   if (detail.error && (t.status === 'failed' || t.status === 'defect')) {
     const why = explain(t, detail);
