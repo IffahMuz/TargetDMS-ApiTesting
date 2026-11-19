@@ -43,6 +43,12 @@
   .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center; }
   .bar input, .bar select, .btn { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; }
   .bar input { flex:1; min-width:220px; } .btn { cursor:pointer; } .count { color:var(--mute); }
+  /* Search boxes sit at the right end of their row, with a magnifying glass inside on the right. */
+  .bar .search { position:relative; display:block; margin-left:auto; width:360px; max-width:100%; }
+  .bar .search input { width:100%; min-width:0; padding-right:34px; }
+  .bar .search svg { position:absolute; right:11px; top:50%; transform:translateY(-50%); color:var(--mute); pointer-events:none; }
+  .bar .search input::-webkit-search-cancel-button { margin-right:4px; }
+  @media (max-width:760px) { .bar .search { width:100%; margin-left:0; } }
   .head { margin:18px 0 6px; font-weight:600; font-size:15px; }
   .row { background:var(--card); border:1px solid var(--line); border-radius:8px; margin-bottom:6px; overflow:hidden; }
   .row > summary { list-style:none; cursor:pointer; position:relative; display:grid; grid-template-columns:110px minmax(0,1fr) 260px 70px auto; gap:10px; align-items:center; padding:8px 12px 8px 28px; }
@@ -130,10 +136,10 @@
 
   <section id="tc">
     <div class="bar">
-      <input id="tcq" type="search" placeholder="Search scenario, group, file or error">
       <select id="tcf"><option value="">All results</option><option value="running">Running</option><option value="queued">Waiting</option><option value="passed">Passed</option><option value="failed">Failed (unexpected)</option><option value="defect">Failed (known server defect)</option><option value="skipped">Skipped</option></select>
       <button class="btn" id="tcx">Open failing</button><button class="btn" id="tcz">Close all</button>
       <span class="count" id="tcc"></span>
+      <label class="search"><input id="tcq" type="search" placeholder="Search scenario, group, file or error" aria-label="Search scenario, group, file or error"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></label>
     </div>
     <div id="tclist"></div>
   </section>
@@ -141,9 +147,9 @@
   <section id="cov" hidden>
     <div class="cards" id="covcards"></div>
     <div class="bar">
-      <input id="covq" type="search" placeholder="Search endpoint, tag or description">
       <select id="covf"><option value="">All endpoints of this module</option><option value="covered">Covered</option><option value="not">Not covered yet</option></select>
       <span class="count" id="covc"></span>
+      <label class="search"><input id="covq" type="search" placeholder="Search endpoint, tag or description" aria-label="Search endpoint, tag or description"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></label>
     </div>
     <div id="covmods" hidden></div>
     <div id="covlist"></div>
@@ -151,9 +157,9 @@
 
   <section id="ep" hidden>
     <div class="bar">
-      <input id="epq" type="search" placeholder="Search endpoint, tag or description">
       <select id="epf"><option value="">All endpoints</option><option value="auto">Automated</option><option value="no">Not automated</option><option value="fail">Has real failures (red)</option><option value="defect">Has known defects (purple)</option></select>
       <span class="count" id="epc"></span>
+      <label class="search"><input id="epq" type="search" placeholder="Search endpoint, tag or description" aria-label="Search endpoint, tag or description"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></label>
     </div>
     <div id="eplist"></div>
   </section>
@@ -296,7 +302,8 @@ function testRow(t, focusEndpoint) {
 function renderTests() {
   const q = $('tcq').value.toLowerCase(), f = $('tcf').value;
   const list = [...tests.values()].filter((t) => (!f || t.status === f) && (!q || (t.title + ' ' + t.group + ' ' + t.file + ' ' + t.error + ' ' + t.skipReason).toLowerCase().includes(q)));
-  $('tcc').textContent = list.length + ' of ' + tests.size + ' test cases';
+  // The "x of y" count shows only while a search or filter narrows the list.
+  $('tcc').textContent = q || f ? list.length + ' of ' + tests.size + ' test cases' : '';
   const box = $('tclist');
   const scroll = window.scrollY;
   box.replaceChildren();
@@ -316,7 +323,7 @@ async function renderEndpoints() {
   const q = $('epq').value.toLowerCase(), f = $('epf').value;
   const list = E.filter((e) => (!f || (f === 'auto' && e.automated) || (f === 'no' && !e.automated) || (f === 'fail' && e.failed > 0) || (f === 'defect' && e.defect > 0)) &&
     (!q || (e.path + ' ' + e.tag + ' ' + e.summary + ' ' + e.method).toLowerCase().includes(q)));
-  $('epc').textContent = list.length + ' of ' + E.length + ' endpoints';
+  $('epc').textContent = q || f ? list.length + ' of ' + E.length + ' endpoints' : '';
   const box = $('eplist'); box.replaceChildren();
   if (!E.length) box.appendChild(el('div', 'empty', 'The API spec has not been downloaded yet; it appears when a run starts.'));
   let last = '';
@@ -375,7 +382,7 @@ async function renderCoverage() {
   }
   const q = $('covq').value.toLowerCase(), f = $('covf').value;
   const list = C.endpoints.filter((e) => (!f || (f === 'covered' && e.covered) || (f === 'not' && !e.covered)) && (!q || (e.path + ' ' + e.tag + ' ' + e.summary + ' ' + e.method).toLowerCase().includes(q)));
-  $('covc').textContent = list.length + ' of ' + C.total + ' endpoints';
+  $('covc').textContent = q || f ? list.length + ' of ' + C.total + ' endpoints' : '';
   const box = $('covlist'); box.replaceChildren();
   if (!list.length) box.appendChild(el('div', 'empty', 'No endpoints match.'));
   let last = '';
