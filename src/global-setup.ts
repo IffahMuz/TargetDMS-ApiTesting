@@ -43,5 +43,6 @@ export default async function globalSetup() {
   fs.writeFileSync(tokenPath, JSON.stringify({ token }));
   // A new run may log in again once if its token stops working part way (see src/fixtures.ts); forget the last run's attempts.
   fs.rmSync(path.join(cacheDir, 'relogin.json'), { force: true });
+  fs.rmSync(path.join(cacheDir, 'pause.json'), { force: true });   // a request-limit notice left by a stopped run
   await ctx.dispose();
 }

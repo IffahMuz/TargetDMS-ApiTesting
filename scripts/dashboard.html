@@ -78,6 +78,7 @@
   .plain b { display:block; margin-bottom:2px; } .plain.net { background:var(--infobg); border-color:var(--info); } .plain.net b { color:var(--info); }
   .note { background:var(--warnbg); border-left:4px solid var(--warn); padding:8px 12px; border-radius:6px; margin:4px 0; }
   .note.info { background:var(--infobg); border-left-color:var(--info); }
+  .now .paused { display:block; margin-top:4px; color:var(--warn); font-weight:600; }
   .err { background:var(--badbg); border-left:4px solid var(--bad); padding:8px 12px; border-radius:6px; margin:6px 0; white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Consolas,monospace; }
   .ex { border:1px solid var(--line); border-radius:8px; margin:8px 0; }
   .ex > summary { cursor:pointer; position:relative; padding:7px 10px 7px 28px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; list-style:none; }
@@ -215,7 +216,7 @@ function renderHeader() {
   [count('passed'), count('defect'), count('failed'), count('skipped')].forEach((n, i) => { bars[i].style.width = (total ? (n / total) * 100 : 0) + '%'; });
   const running = [...tests.values()].find((t) => t.status === 'running');
   $('now').hidden = !running;
-  if (running) $('now').replaceChildren(el('b', '', 'Running now: ' + running.title), el('small', '', running.group + '  |  ' + running.file));
+  if (running) $('now').replaceChildren(el('b', '', 'Running now: ' + running.title), el('small', '', running.group + '  |  ' + running.file), ...pauseNote());
 }
 
 // ---- test rows ----
@@ -493,6 +494,21 @@ source.onmessage = (m) => {
   else if (ev.type === 'test') { tests.set(ev.test.id, ev.test); dirty.add(ev.test.id); run.status = run.status === 'idle' ? 'running' : run.status; schedule(); }
 };
 setInterval(() => { if (run.status === 'running') renderHeader(); }, 1000);
+
+// ---- request limit: the suite pauses itself to stay under the API's limit; say so, so the run does not look stuck ----
+var pause = null, pauseSkew = 0;   // var: renderHeader may run before this line
+async function pollPause() {
+  if (run.status !== 'running') { pause = null; return; }
+  try { pause = await (await fetch('/api/pause', { cache: 'no-store' })).json(); } catch { pause = null; }
+  if (pause) pauseSkew = Date.now() - pause.now;
+}
+setInterval(pollPause, 2000);
+function pauseNote() {
+  if (!pause) return [];
+  const left = Math.max(0, Math.ceil((pause.until + pauseSkew - Date.now()) / 1000));
+  const why = pause.reason === '429' ? 'The server said "too many requests"; waiting for its limit to reset' : 'Waiting for the request limit (80 calls per 3 minutes)';
+  return [el('span', 'paused', why + (left ? ' - carries on in about ' + (left >= 60 ? Math.floor(left / 60) + ' min ' + (left % 60) + ' s' : left + ' s') : ' - carrying on now') + '. Not stuck.')];
+}
 
 // Saved runs and Report Analysis are opened from the side menu (scripts/nav.js).
 // ---- opened from the runner page with ?module=<id>: show a Run button and start the run only when it is clicked ----

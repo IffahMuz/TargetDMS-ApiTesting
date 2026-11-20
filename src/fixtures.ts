@@ -14,6 +14,17 @@ const BUDGET = Number(process.env.REQUEST_BUDGET ?? 80);
 const stamps: number[] = [];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * While the suite waits for the request limit, pause.json says why and until when, so the dashboard can show
+ * "waiting for the request limit" instead of looking stuck. The file is removed when the wait ends.
+ */
+export const pausePath = path.join(cacheDir, 'pause.json');
+async function pause(ms: number, reason: 'budget' | '429'): Promise<void> {
+  const since = Date.now();
+  try { fs.writeFileSync(pausePath, JSON.stringify({ reason, since, until: since + ms })); } catch { /* the notice is optional */ }
+  try { await sleep(ms); } finally { try { fs.rmSync(pausePath, { force: true }); } catch { /* already gone */ } }
+}
+
 async function waitForRoom(): Promise<void> {
   if (BUDGET <= 0) return;
   for (;;) {
@@ -23,7 +34,7 @@ async function waitForRoom(): Promise<void> {
       stamps.push(now);
       return;
     }
-    await sleep(stamps[0] + WINDOW_MS - now + 250);
+    await pause(stamps[0] + WINDOW_MS - now + 250, 'budget');
   }
 }
 
@@ -140,7 +151,7 @@ export const throttled = (request: APIRequestContext, log?: Exchange[]): APIRequ
           try {
             let res = await value.apply(target, args);
             if (res.status() === 429 && BUDGET > 0) {
-              await sleep(WINDOW_MS + 5_000);
+              await pause(WINDOW_MS + 5_000, '429');
               await waitForRoom();
               res = await value.apply(target, args);
             }

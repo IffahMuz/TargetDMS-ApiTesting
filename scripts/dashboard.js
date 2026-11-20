@@ -418,6 +418,11 @@ http.createServer(async (req, res) => {
   } else if (req.method === 'POST' && url.pathname === '/api/run-stop') {
     if (running()) spawn('taskkill', ['/pid', String(job.child.pid), '/T', '/F'], { stdio: 'ignore' });
     json(res, { ok: true });
+  } else if (url.pathname === '/api/pause') {
+    // The tests write .cache/pause.json while they wait for the request limit (src/fixtures.ts). Only a current one counts.
+    let p = null;
+    try { p = JSON.parse(fs.readFileSync(path.join(workDir, '.cache', 'pause.json'), 'utf8')); } catch { /* not waiting */ }
+    json(res, p && state.status === 'running' && p.until > Date.now() - 2000 ? { ...p, now: Date.now() } : null);
   } else if (url.pathname === '/api/state') {
     json(res, snapshot());
   } else if (url.pathname === '/api/module-coverage') {
